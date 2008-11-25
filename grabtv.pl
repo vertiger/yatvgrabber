@@ -34,6 +34,7 @@ my $tmpdir = "/home/$ENV{'USER'}/.tvgrab/cache";
 my $swap_file = "$tmpdir/tempgrab";
 my @useragents = ('Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10_5_5; fr-fr) AppleWebKit/525.18 (KHTML, like Gecko) Version/3.1.2 Safari/525.20.1','Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.9.0.3) Gecko/2008092510 Ubuntu/8.04 (hardy) Firefox/3.0.3','Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.0; SLCC1; .NET CLR 2.0.50727; Media Center PC 5.0; .NET CLR 3.0.04506)');
 my $language = 'de'; # TODO support other languages
+my $wget_timeout = "5";
 
 # lists
 my @idlist = ();
@@ -383,7 +384,7 @@ sub use_wget($$)
     my $id = shift;
     my $wgetquiet = '';
     my $wgetusragent = "--user-agent=\"$useragents[2]\"";
-    my $wgetoptions = "-nc --random-wait --no-cache --no-proxy";
+    my $wgetoptions = "-nc --random-wait --no-cache --no-proxy --timeout=$wget_timeout";
     my $wgetcommand = '';
     
     $wgetquiet = $mute ? '--quiet':'';
