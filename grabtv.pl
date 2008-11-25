@@ -111,59 +111,68 @@ sub check_options()
     my @results = ();
 
     # return an error if the --days parameter is missing
-    if (not defined $nbr_of_days)
+    if (not defined $nbr_of_days and not defined $chanlist)
     {
 	print STDERR "the following parameter are mandatory: --days X you may first run the script with the --configure option to set up the channel to grab\n";	
 	exit $retparamerr;
     }
-    
-    # set temp days
-    $tmpdays = $nbr_of_days;
-    # set the offset if the option is used otherwise the dayoffset is 0 initial value
-    if (defined $offset)
+    elsif(defined $nbr_of_days)
     {
-	$dayoffset = $offset;
-	$nbr_of_days += $offset;
-    }
-
-    # convert the number of days to days and week
-    if ($nbr_of_days > 0)
-    {
-	$nbr_of_days = $nbr_of_days > 21 ? 21 : $nbr_of_days;
-	@results = (($nbr_of_days > 6) and (($nbr_of_days % 7) == 0)) ? (6, (($nbr_of_days/7)-1)) : ((($nbr_of_days % 7) - 1), int ($nbr_of_days/7));
-	
-	$nbr_of_days = $results[0];
-	$nbr_of_weeks = $results[1];
-	print "days=$nbr_of_days, weeks=$nbr_of_weeks\n" if $verbose;	    
-    }
-    else
-    {
-	print STDERR "the following parameter --days should have an int value > 0\n";
-	exit $retparamerr;
-    }
-
-    if ($dayoffset > 0)
-    {
-	if (($dayoffset + $tmpdays) > 21)
+	# set temp days
+	$tmpdays = $nbr_of_days;
+	# set the offset if the option is used otherwise the dayoffset is 0 initial value
+	if (defined $offset)
 	{
-	    print STDERR "the $dayoffset offset and the $nbr_of_days days to grab are exceading the maximum grab value (21)... the script tries to reduce the offset\n";
-	    $dayoffset = 21 - $tmpdays;
+	    $dayoffset = $offset;
+	    $nbr_of_days += $offset;
 	}
-	$refonresults = calculate_date($dayoffset);
-	@results = @{$refonresults};
-	$dayoffset = $results[0] + 1;
-	$nbr_of_weeks = $results[1];
-	print "OFFSET odays=$dayoffset weeks=$nbr_of_weeks gdays=$nbr_of_days\n";
-	exit 82;
+
+	# convert the number of days to days and week
+	if ($nbr_of_days > 0)
+	{
+	    $nbr_of_days = $nbr_of_days > 21 ? 21 : $nbr_of_days;
+	    @results = (($nbr_of_days > 6) and (($nbr_of_days % 7) == 0)) ? (6, (($nbr_of_days/7)-1)) : ((($nbr_of_days % 7) - 1), int ($nbr_of_days/7));
+	    
+	    $nbr_of_days = $results[0];
+	    $nbr_of_weeks = $results[1];
+	    print "days=$nbr_of_days, weeks=$nbr_of_weeks\n" if $verbose;	    
+	}
+	else
+	{
+	    print STDERR "the following parameter --days should have an int value > 0\n";
+	    exit $retparamerr;
+	}
+
+	if ($dayoffset >= 0)
+	{
+	    if (($dayoffset + $tmpdays) > 21)
+	    {
+		print STDERR "the $dayoffset offset and the $nbr_of_days days to grab are exceading the maximum grab value (21)... the script tries to reduce the offset\n";
+		$dayoffset = 21 - $tmpdays;
+	    }
+	    $refonresults = calculate_date($dayoffset);
+	    @results = @{$refonresults};
+	    $dayoffset = $results[0] + 1;
+	    $nbr_of_weeks = $results[1];
+	    print "OFFSET odays=$dayoffset weeks=$nbr_of_weeks gdays=$nbr_of_days\n";
+	    #exit 82;
+	}
+	else
+	{
+	    print STDERR "the following parameter --offset should have an int value > 0\n";
+	    exit $retparamerr;
+	}
     }
-    else
+    
+    # display the channel list
+    if ($chanlist)
     {
-	print STDERR "the following parameter --offset should have an int value > 0\n";
-	exit $retparamerr;
+	get_main_pages();
+	get_channels();
+	display_channels();
+	exit $success;
     }
 
-
-   
     if ($configure)
     {
 	#configure(@channellist);
@@ -186,7 +195,7 @@ d|days=x => grab tv data for x days counting from now! (x > 0)
 off|offset=X => grab tv data setting the begin period to X days (X > 0)
 
 -- NoN Official parameters
-d|day=i=> gets program for the number of days i E [0..6]
+d|day=i=> gets program for the number of days i E [0..6]..............................OLD
 w|week=i => gets program for the number of weeks i E [0..2]
 g|channel-group=i => gets the program for number of groups i E [0..16]
 l|channel-list => gives a list of every tv channel available
@@ -895,6 +904,37 @@ sub parse_channel($)
     }
 }
 
+# this function display all the channels available on the given website...
+sub display_channels()
+{
+    my $nbrchan = @channellist;
+    my %chaninfo = ();
+    my $channelid = '';
+    my $channelname = '';
+    my $chanlogolink = '';
+
+    print "/------------------------------------------\\\n";
+    print "| Channel List                             |\n";
+    print "\------------------------------------------/\n";
+    print "from $commonurl...\n\n";
+
+
+    foreach (@channellist)
+    {
+	%chaninfo = %{$_};
+	$channelid = $chaninfo{'id'};
+	$channelname = $chaninfo{'name'};
+	$chanlogolink = $chaninfo{'link'};
+
+	$channelname =~ s/&/&amp;/g;
+   
+	print("channel id=${channelid}\t\t\t$channelname\n");
+    }
+    print "/------------------------------------------\\\n";
+    print "| Found $nbrchan Channels\n";
+    print "\------------------------------------------/\n";
+    print "from $commonurl...\n\n";
+}
 # xml_print($aline)
 # automatic \n at the end of the line
 sub xml_print($)
