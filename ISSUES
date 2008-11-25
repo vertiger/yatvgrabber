@@ -1,0 +1,1 @@
+| sed -e "s/&/and/g" > patched.xml

@@ -1,0 +1,9 @@
+todo
+
+- make another directory .tvgrab/cache/* to store files................ DONE
+- use channel.id with id = \d.......................................... DONE
+- add icone to channel list.............................................DONE
+- adapt to normal tvgrabber options.
+- defined --configure option
+- patch FSK to american rating..........................................DONE
+
