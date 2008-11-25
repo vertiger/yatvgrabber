@@ -29,8 +29,9 @@ use File::Path;
 my $commonurl = "http://cablecom.tvtv.ch/tvtv";
 my $ua;
 #my $tmpdir = "/tmp/tvgrab";
-#my $tmpdir = "~/.tvgrab/cache";
-my $tmpdir = "/home/$ENV{'USER'}/.tvgrab/cache";
+my $tmpdir = "/home/$ENV{'USER'}/.tvgrab";
+my $tmpcache = "$tmpdir/cache";
+my $chanconffile = "$tmpdir/channel.grab";
 my $swap_file = "$tmpdir/tempgrab";
 my @useragents = ('Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10_5_5; fr-fr) AppleWebKit/525.18 (KHTML, like Gecko) Version/3.1.2 Safari/525.20.1','Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.9.0.3) Gecko/2008092510 Ubuntu/8.04 (hardy) Firefox/3.0.3','Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.0; SLCC1; .NET CLR 2.0.50727; Media Center PC 5.0; .NET CLR 3.0.04506)');
 my $language = 'de'; # TODO support other languages
@@ -40,6 +41,7 @@ my $wget_timeout = "5";
 my @idlist = ();
 my @mainpages = ();
 my @channellist = ();
+my @validchannels = ();
 my @programmelist = ();
 # statistics
 my $grabstats = 0;
@@ -69,7 +71,6 @@ my $chanlist;
 my $processlocal;
 my $capabilities;
 my $offset;
-
 
 
 sub options()
@@ -111,14 +112,42 @@ sub check_options()
     my $refonresults = 0;
     my @results = ();
 
-    # return an error if the --days parameter is missing
-    if (not defined $nbr_of_days and not defined $chanlist)
+    # display the channel list
+    if ($chanlist)
     {
-	print STDERR "the following parameter are mandatory: --days X you may first run the script with the --configure option to set up the channel to grab\n";	
+	list_of_channels();
+	exit $success;
+    }
+
+    # configure channel valid list
+    if ($configure)
+    {
+	if (not -e "$chanconffile")
+	{
+	    list_of_channels();
+	}
+	else
+	{
+	    warn "Generation FAILED, the $chanconffile channel configuration file already exits (delete the file, and launch the script again, this will regenerate the channel listing $chanconffile)\n";
+	}
+	exit $success;
+    }
+
+    # return an error if the --days parameter is missing
+    if (not defined $nbr_of_days and not defined $chanlist and not defined $configure)
+    {
+	print STDERR "one of the following parameters are mandatory: --days X --configure --channel-list\n";	
 	exit $retparamerr;
+    }
+    elsif(not -e "$chanconffile")
+    {
+	warn "the $chanconffile channel configuration file is missing, please call the --configure option first.\n";
+	exit $retsyserr;
     }
     elsif(defined $nbr_of_days)
     {
+	# gen the channel list the user wants to grab
+	generate_valid_channels();
 	# set temp days
 	$tmpdays = $nbr_of_days;
 	# set the offset if the option is used otherwise the dayoffset is 0 initial value
@@ -164,21 +193,21 @@ sub check_options()
 	    exit $retparamerr;
 	}
     }
-    
-    # display the channel list
-    if ($chanlist)
-    {
-	get_main_pages();
-	get_channels();
-	display_channels();
-	exit $success;
-    }
+}
 
-    if ($configure)
-    {
-	#configure(@channellist);
-    }
+sub generate_valid_channels()
+{
+    print "loading the $chanconffile configuration file...\n" if not $mute;
+    @validchannels = read_from_file("$chanconffile");
+    chop(@validchannels);
+    print "authorised channel list: @validchannels\n" if not $mute;
+}
 
+sub list_of_channels()
+{
+    get_main_pages();
+    get_channels();
+    display_channels();
 }
 
 
@@ -350,7 +379,7 @@ sub get_tv_program($)
 		{
 		    $url = "$commonurl/web/programdetails.vm?programmeId=${id}&lang=de&epgView=list&groupid=0";
 		    print "now getting --> $url\n" if not $mute;
-		    if (-e "$tmpdir/$id.htm")
+		    if (-e "$tmpcache/$id.htm")
 		    {
 			print "$id.htm already exists... Skip Grabbing!\n" if not $mute;
 		    }
@@ -388,7 +417,7 @@ sub use_wget($$)
     my $wgetcommand = '';
     
     $wgetquiet = $mute ? '--quiet':'';
-    $wgetcommand = "wget \"$url\" $wgetoptions $wgetusragent -O $tmpdir/$id.htm $wgetquiet";
+    $wgetcommand = "wget \"$url\" $wgetoptions $wgetusragent -O $tmpcache/$id.htm $wgetquiet";
     
     print "wgetcommand: $wgetcommand\n" if not $mute;
     if (0 != system($wgetcommand))
@@ -813,7 +842,7 @@ sub extract_info()
     print "ID LIST: @idlist\n" if $verbose and not $mute;
     foreach (@idlist)
     {
-	@lines = read_from_file("$tmpdir/$_.htm");
+	@lines = read_from_file("$tmpcache/$_.htm");
 	#print "LINES: @lines\n";
 	parse_lines(\@lines);
 	$fileparsed += 1;
@@ -826,7 +855,7 @@ sub local_parse_info()
     my $i;
     my @lines = ();
 
-    @infolist = glob("$tmpdir/[0-9]*.htm");
+    @infolist = glob("$tmpcache/[0-9]*.htm");
     
     #print "INFO IDS: @infolist\n";
     foreach $i (@infolist)
@@ -848,15 +877,15 @@ sub get_main_pages()
     foreach $groupid (0..16)
     {
 	$url = "$commonurl/index.vm?dayId=0&weekId=0&groupid=${groupid}&lang=de&epgView=list";
-	if (not -e "$tmpdir/changroup$groupid.htm")
+	if (not -e "$tmpcache/changroup$groupid.htm")
 	{
 	    use_wget($url, "changroup$groupid");
 	}
 	else
 	{
-	    print "$tmpdir/changroup$groupid.htm already exists...\n" if not $mute;
+	    print "$tmpcache/changroup$groupid.htm already exists...\n" if not $mute;
 	}
-	@mainpages = (@mainpages, "$tmpdir/changroup$groupid.htm");
+	@mainpages = (@mainpages, "$tmpcache/changroup$groupid.htm");
     } 
 }
 
@@ -918,23 +947,31 @@ sub display_channels()
     print "| Channel List                             |\n";
     print "\------------------------------------------/\n";
     print "from $commonurl...\n\n";
-
-
+    
+    if ($configure)
+    {
+	open (WF, ">$chanconffile") or warn "could not create the $chanconffile file $!";
+    }
+    
     foreach (@channellist)
     {
+ 
 	%chaninfo = %{$_};
 	$channelid = $chaninfo{'id'};
 	$channelname = $chaninfo{'name'};
 	$chanlogolink = $chaninfo{'link'};
-
+	
 	$channelname =~ s/&/&amp;/g;
-   
-	print("channel id=${channelid}\t\t\t$channelname\n");
+	
+	print "channel id=${channelid}\t\t\t$channelname\n";
+	print WF "$channelname\n" if ($configure);	
     }
+
     print "/------------------------------------------\\\n";
     print "| Found $nbrchan Channels\n";
     print "\------------------------------------------/\n";
     print "from $commonurl...\n\n";
+    close(WF) if $configure;
 }
 # xml_print($aline)
 # automatic \n at the end of the line
@@ -980,12 +1017,17 @@ sub xml_print_channel($)
     my $channelid = $chaninfo{'id'};
     my $channelname = $chaninfo{'name'};
     my $chanlogolink = $chaninfo{'link'};
+    my @grepped = ();
 
     $channelname =~ s/&/&amp;/g;
-    xml_print("\t\<channel id=\"channel.${channelid}\"\>");
-    xml_print("\t\t\<display-name lang=\"$language\"\>$channelname\<\/display-name\>");
-    xml_print("\t\t\<icon src=\"${chanlogolink}\"\/\>");
-    xml_print("\t\<\/channel\>");
+    @grepped = grep(/${channelname}/, @validchannels);
+    if (defined $grepped[0])
+    {
+	xml_print("\t\<channel id=\"channel.${channelid}\"\>");
+	xml_print("\t\t\<display-name lang=\"$language\"\>$channelname\<\/display-name\>");
+	xml_print("\t\t\<icon src=\"${chanlogolink}\"\/\>");
+	xml_print("\t\<\/channel\>");
+    }
 }
 
 # create bonnus entries
@@ -1111,6 +1153,7 @@ sub xml_print_programme($)
     # locals
     my $date = '';
     my $channelid = '';
+    my $channelname = '';
     my $title = '';
     my $start = '';
     my $end = '';
@@ -1118,6 +1161,7 @@ sub xml_print_programme($)
     my @categories = ();
     my $programmetype = '';
     my $warning = 0;
+    my @grepped = ();
 
     if (defined $programme{'date'})
     {
@@ -1128,6 +1172,16 @@ sub xml_print_programme($)
     else
     {
 	print STDERR "missing date\n";
+	$warning++;
+    }
+    if (defined $programme{'channel'})
+    {
+	$channelname = $programme{'channel'};
+	$channelname =~ s/&/&amp;/g;
+    }
+    else
+    {
+	print STDERR "missing channelname\n";
 	$warning++;
     }
     if (defined $programme{'channelid'})
@@ -1192,29 +1246,33 @@ sub xml_print_programme($)
 	$warning++;
     }
 
-    if ($warning == 0)
+    @grepped = grep(/${channelname}/, @validchannels);
+    if (defined $grepped[0])
     {
-	xml_print("\t\<programme start=\"${date}${start}\" stop=\"${date}${end}\" channel=\"channel.${channelid}\"\>");
-	xml_print("\t\t\<title lang=\"${language}\"\>${title}\<\/title\>");
-	xml_print("\t\t\<date\>${date}\<\/date>");
-	@categories = split(', ', $category);
-	foreach (@categories)
+
+	if ($warning == 0)
 	{
-	    xml_print("\t\t\<category lang=\"${language}\"\>$_\<\/category\>");
-	}
+	    xml_print("\t\<programme start=\"${date}${start}\" stop=\"${date}${end}\" channel=\"channel.${channelid}\"\>");
+	    xml_print("\t\t\<title lang=\"${language}\"\>${title}\<\/title\>");
+	    xml_print("\t\t\<date\>${date}\<\/date>");
+	    @categories = split(', ', $category);
+	    foreach (@categories)
+	    {
+		xml_print("\t\t\<category lang=\"${language}\"\>$_\<\/category\>");
+	    }
 #	xml_print("\t\<category lang=\"${language}\"\>${category}\<\/category\>");
-	xml_print_additional_materials(\%programme);
-	xml_print("\t\<\/programme\>");
-    }
-    else
-    {
-	warn("some mandatory keys are missing take a look to the following hash: warning nr: $warning\n");
-	foreach (keys(%programme))
+	    xml_print_additional_materials(\%programme);
+	    xml_print("\t\<\/programme\>");
+	}
+	else
 	{
-	    print STDERR "key: $_ -> $programme{$_}\n";
+	    warn("some mandatory keys are missing take a look to the following hash: warning nr: $warning\n");
+	    foreach (keys(%programme))
+	    {
+		print STDERR "key: $_ -> $programme{$_}\n";
+	    }
 	}
     }
-    
 }
 
 sub xml_create_channels()
@@ -1226,6 +1284,7 @@ sub xml_create_channels()
 #	xml_print_channel($_);
 	xml_print_channel($_);
     }
+    #exit 82;
 }
 
 sub xml_create_programmes()
@@ -1254,8 +1313,8 @@ sub main()
 	print "baseline\n";
 	return $success;
     }
-    print "create temporary directory--> $tmpdir\n" if not $mute;
-    mkpath("$tmpdir");
+    print "create temporary directory--> $tmpcache\n" if not $mute;
+    mkpath("$tmpcache");
 
     # grab the main pages containing the channels
     get_main_pages();
@@ -1263,7 +1322,7 @@ sub main()
     
     if ($processlocal)
     {
-	print "just parse the files located in the $tmpdir\n" if not $mute;
+	print "just parse the files located in the $tmpcache\n" if not $mute;
 	local_parse_info();
 	xml_write();
     }
@@ -1292,7 +1351,7 @@ sub main()
 # function tests
 
 #combine_dates();
-#my @resu = read_from_file("$tmpdir/16409305.htm");
+#my @resu = read_from_file("$tmpcache/16409305.htm");
 #print "RESU: @resu\n"; 
 
 # program entry point

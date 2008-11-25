@@ -4,6 +4,8 @@ todo
 - use channel.id with id = \d.......................................... DONE
 - add icone to channel list.............................................DONE
 - adapt to normal tvgrabber options.
-- defined --configure option
+- defined --configure option............................................DONE
 - patch FSK to american rating..........................................DONE
+
++ optimise the --configure functionality, do not parse if the channel is not in the list
 
