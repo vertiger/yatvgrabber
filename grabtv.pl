@@ -470,20 +470,33 @@ sub parse_lines($)
     foreach (@lines)
     {
 	$i++;
-	if ($_ =~ /id="detail-box-station"/)
+	#if ($_ =~ /id="detail-box-station"/)
+	#{
+	#    $extractchan = 1;
+	#    next;
+	#}
+	#if ($extractchan == 1)
+	#{
+	#    print "I AM HERE\n";
+	    #if ($_ =~ /td align=.*valign=.*class=.*>(.*)</)
+	#if ($_ =~ /td align=.*valign=.*class="fb-b10"\s+\>(.*)\<\/td\>.*/)
+	 #   {
+		#print "CHAN: $1\n" if (defined $1 and not $mute);
+		#$programme{'channel'} = "$1" if defined $1;
+		#$extractchan = 0;
+		#next;
+	    #}
+	#}
+	#<td align=center valign=middle class="fb-b10" >EinsPlus</td>
+	# local patch to find the channel...
+	#if ($_ =~ /.*<td.*fb-b10.*>([^\d+.]*)<.*td>.*/)
+	if ($_ =~ /.*fb-b10.*>(.*)<.*/ and not $1 =~ m/\./ )
 	{
-	    $extractchan = 1;
+	    print "CHAN: $1\n" if (defined $1 and not $mute);
+	    print "CHAN: $1\n" if (defined $2 and not $mute);
+	    $programme{'channel'} = "$1" if defined $1;
+	    $extractchan = 0;
 	    next;
-	}
-	if ($extractchan == 1)
-	{
-	    if ($_ =~ /td align=.*valign=.*class=.*>(.*)</)
-	    {
-		print "CHAN: $1\n" if (defined $1 and not $mute);
-		$programme{'channel'} = "$1" if defined $1;
-		$extractchan = 0;
-		next;
-	    }
 	}
 	# extarct the channel id
 	# hbx.pn="SF ZWEI (900)";//PAGE NAME(S)
