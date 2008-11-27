@@ -1,5 +1,11 @@
 #!/usr/bin/perl -w
 #
+#Copyright (C) [2008] [keller.eric, lars.schmohl]
+#
+#This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 3 of the License, or (at your option) any later version.
+#This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+#You should have received a copy of the GNU General Public License along with this program; if not, see <http://www.gnu.org/licenses>.
+#Additional permission under GNU GPL version 3 section 7
 #
 #------------------------------------------------------------------------------#
 # TODO
@@ -12,11 +18,6 @@
 # User agents
 #------------------------------------------------------------------------------#
 #
-#
-# Your User Agent is: Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10_5_5; fr-fr) AppleWebKit/525.18 (KHTML, like Gecko) Version/3.1.2 Safari/525.20.1
-# Your User Agent is: Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.9.0.3) Gecko/2008092510 Ubuntu/8.04 (hardy) Firefox/3.0.3
-# Your User Agent is: Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.0; SLCC1; .NET CLR 2.0.50727; Media Center PC 5.0; .NET CLR 3.0.04506)
-
 
 use strict;
 use Getopt::Long;
@@ -524,6 +525,8 @@ sub parse_lines($)
 	{
 	    print "DESC: $1\n" if (defined $1 and not $mute);
 	    $programme{'desc'} = "$1" if defined $1;
+	    # FIXME: remove <br/> tag in description...
+	    #$programme{'desc'} =~ s/\<br\/\>//g;
 	    next;
 	}
 	# extraction of the date
@@ -947,7 +950,7 @@ sub display_channels()
     print "/------------------------------------------\\\n";
     print "| Channel List                             |\n";
     print "\------------------------------------------/\n";
-    print "from $commonurl...\n\n";
+    print "from: $commonurl...\nto: $chanconffile\n";
     
     if ($configure)
     {
@@ -971,7 +974,7 @@ sub display_channels()
     print "/------------------------------------------\\\n";
     print "| Found $nbrchan Channels\n";
     print "\------------------------------------------/\n";
-    print "from $commonurl...\n\n";
+    print "from: $commonurl...\nto: $chanconffile\n";
     close(WF) if $configure;
 }
 # xml_print($aline)
@@ -979,6 +982,12 @@ sub display_channels()
 sub xml_print($)
 {
     my $line = shift;
+
+    # removing unwanted html tags...
+    $line =~ s/\<br\/\>//g;
+    $line =~ s/&/&amp;/g;
+    # temporary... because cablecom.tvtv.ch has a problem with c't magazin
+    $line =~ s/c\<t/c't/g;
 
     if ($output)
     {
@@ -1261,7 +1270,6 @@ sub xml_print_programme($)
 	    {
 		xml_print("\t\t\<category lang=\"${language}\"\>$_\<\/category\>");
 	    }
-#	xml_print("\t\<category lang=\"${language}\"\>${category}\<\/category\>");
 	    xml_print_additional_materials(\%programme);
 	    xml_print("\t\<\/programme\>");
 	}
