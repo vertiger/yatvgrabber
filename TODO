@@ -8,4 +8,5 @@ todo
 - patch FSK to american rating..........................................DONE
 
 + optimise the --configure functionality, do not parse if the channel is not in the list
++ make a makefile | moulinette for testing the output xml...
 
