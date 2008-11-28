@@ -901,6 +901,7 @@ sub get_main_pages()
 	}
 	else
 	{
+	    system("touch $tmpcache/changroup$groupid.htm");
 	    print "$tmpcache/changroup$groupid.htm already exists...\n" if not $mute;
 	}
 	@mainpages = (@mainpages, "$tmpcache/changroup$groupid.htm");
