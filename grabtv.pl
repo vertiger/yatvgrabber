@@ -38,6 +38,7 @@ my @useragents = ('Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10_5_5; fr-fr) Appl
 my $language = 'de'; # TODO support other languages
 my $wget_timeout = "15";
 #my $http_proxy = "http://127.0.0.1:8118";
+my $cache_age_day = "+1";
 
 # lists
 my @idlist = ();
@@ -1326,6 +1327,12 @@ sub xml_write()
     xml_close();
 }
 
+#cache clean up function
+sub cleanup_cache()
+{
+    system("find $tmpcache -atime $cache_age_day -exec rm -rf \'{}\' +");
+    system("find $tmpcache -empty -exec rm -rf \'{}\' +");
+}
 
 sub main()
 {
@@ -1357,6 +1364,7 @@ sub main()
 	extract_info();
 	xml_write();
     }
+    cleanup_cache();
     
     print "
 ===============================================================================
