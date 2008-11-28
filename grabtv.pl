@@ -37,7 +37,10 @@ my $swap_file = "$tmpdir/tempgrab";
 my @useragents = ('Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10_5_5; fr-fr) AppleWebKit/525.18 (KHTML, like Gecko) Version/3.1.2 Safari/525.20.1','Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.9.0.3) Gecko/2008092510 Ubuntu/8.04 (hardy) Firefox/3.0.3','Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.0; SLCC1; .NET CLR 2.0.50727; Media Center PC 5.0; .NET CLR 3.0.04506)');
 my $language = 'de'; # TODO support other languages
 my $wget_timeout = "15";
-#my $http_proxy = "http://127.0.0.1:8118";
+
+# using Tor!!!
+my $enableproxy = '';
+my $http_proxy = "http://127.0.0.1:8118";
 my $cache_age_day = "+1";
 
 # lists
@@ -46,6 +49,7 @@ my @mainpages = ();
 my @channellist = ();
 my @validchannels = ();
 my @programmelist = ();
+
 # statistics
 my $grabstats = 0;
 my $lineparsed = 0;
@@ -66,6 +70,12 @@ my $output;
 my $verbose;
 my $help;
 # per default it just gets the tv program from the actual day on the main chan.
+# the number of days the grabber has to get
+#
+# As the cablecom site works with the followinf parameter in its address
+#
+#
+
 my $nbr_of_days;
 my $nbr_of_weeks = 0;
 my $nbr_of_groups = 0;
@@ -91,6 +101,7 @@ sub options()
 	       "v|verbose"=> \$verbose,
 	       "o|output-file=s"=> \$output,
 	       "off|offset=i"=> \$offset,
+	       "e|enable-proxy"=> \$enableproxy,
 	       "h|?|help"=> \$help) || die "try -h or --help for more details...";
     
     usage() if $help;
@@ -115,6 +126,18 @@ sub check_options()
     my $refonresults = 0;
     my @results = ();
 
+    # print capabilities
+    if ($capabilities)
+    {
+	print "baseline\n";
+	return $success;
+    }
+    # enabling proxy
+    if (defined $enableproxy)
+    {
+	print "enabling proxy\n";
+	enable_proxy();
+    }
     # display the channel list
     if ($chanlist)
     {
@@ -226,9 +249,9 @@ ca|capabilities => displays the grabber capabilities {baseline, manualconfig, ap
 q|quiet => make it quiet, only display error messages on STDERR
 d|days=x => grab tv data for x days counting from now! (x > 0)
 off|offset=X => grab tv data setting the begin period to X days (X > 0)
+c|configure => get the channel list, and save it to the $chanconffile file. The user can remove as many channels he does not require. When calling the script, only the channel in this file will be grabbed.
 
 -- NoN Official parameters
-d|day=i=> gets program for the number of days i E [0..6]..............................OLD
 w|week=i => gets program for the number of weeks i E [0..2]
 g|channel-group=i => gets the program for number of groups i E [0..16]
 l|channel-list => gives a list of every tv channel available
@@ -238,17 +261,21 @@ h|?|help => display this usage
 NOT YET IMPLEMENTED
 ------------------------------------------------------------------------
 t|threads=i => define the number of threads are take to generate the xml
-c|configure => auto configure the graber, needs user interaction
 v|verbose => make it verbose
 
 Examples:
+# first you have to grab a channel list
+$0 --configure
+# you can print out a listing of the channels 
+$0 --channel-list
 # this will grab every tv program for every channels (-g option set to 16) and stores the results in test.xml
-$0 -d 6 -w 0 -g 16 -o test.xml
+$0 -d 6 -g 16 -o test.xml
 # this will grab the tv data for every channel for 3 weeks (-w 2) an stores the results in test.xml
 $0 -d 6 -w 2 -g 16 -o test.xml
 
 AUTHORS:
-* keller_e
+* keller_e 
+* schmoh_l
 ";
 exit 1;
 }
@@ -416,13 +443,14 @@ sub use_wget($$)
     my $id = shift;
     my $wgetquiet = '';
     my $wgetusragent = "--user-agent=\"$useragents[2]\"";
-    my $wgetoptions = "-nc --random-wait --no-cache --no-proxy --timeout=$wget_timeout";
+    my $wgetoptions = "-nc --random-wait --no-cache --timeout=$wget_timeout";
     my $wgetcommand = '';
     
     $wgetquiet = $mute ? '--quiet':'';
     $wgetcommand = "wget \"$url\" $wgetoptions $wgetusragent -O $tmpcache/$id.htm $wgetquiet";
     
     print "wgetcommand: $wgetcommand\n" if not $mute;
+    
     if (0 != system($wgetcommand))
     {
 	warn("some problem occured when calling system\n");
@@ -471,30 +499,10 @@ sub parse_lines($)
     foreach (@lines)
     {
 	$i++;
-	#if ($_ =~ /id="detail-box-station"/)
-	#{
-	#    $extractchan = 1;
-	#    next;
-	#}
-	#if ($extractchan == 1)
-	#{
-	#    print "I AM HERE\n";
-	    #if ($_ =~ /td align=.*valign=.*class=.*>(.*)</)
-	#if ($_ =~ /td align=.*valign=.*class="fb-b10"\s+\>(.*)\<\/td\>.*/)
-	 #   {
-		#print "CHAN: $1\n" if (defined $1 and not $mute);
-		#$programme{'channel'} = "$1" if defined $1;
-		#$extractchan = 0;
-		#next;
-	    #}
-	#}
-	#<td align=center valign=middle class="fb-b10" >EinsPlus</td>
-	# local patch to find the channel...
-	#if ($_ =~ /.*<td.*fb-b10.*>([^\d+.]*)<.*td>.*/)
+	# extract the channel name
 	if ($_ =~ /.*fb-b10.*>(.*)<.*/ and not $1 =~ m/\./ )
 	{
 	    print "CHAN: $1\n" if (defined $1 and not $mute);
-	    print "CHAN: $1\n" if (defined $2 and not $mute);
 	    $programme{'channel'} = "$1" if defined $1;
 	    $extractchan = 0;
 	    next;
@@ -1056,6 +1064,10 @@ sub xml_print_channel($)
 }
 
 # create bonnus entries
+# this function checks if there are more information contained in the programme hash table, like 
+# actors, description, subtitle, original title, producer, writer, audio format video format, ...
+#
+# sub xml_print_additional_materials($aProgrammeReference)
 sub xml_print_additional_materials($)
 {
     my $refonprogramme = shift;
@@ -1065,7 +1077,6 @@ sub xml_print_additional_materials($)
     my @actors = ();
     my $credits = 0;
     my $subtitle = '';
-
 
     # non mandatory parameters... Bonus if it's existing
     # sub title, original title
@@ -1094,10 +1105,7 @@ sub xml_print_additional_materials($)
 	)
     {
 	# any of the credits contents will write the credit xml tag
-	#if ($credits == 0)
-	#{
 	xml_print("\t\t\<credits\>");
-	#}
 
 	if (defined $programme{'director'})
 	{
@@ -1110,7 +1118,6 @@ sub xml_print_additional_materials($)
 	    @actors = split(', ', $programme{'actors'});
 	    foreach (@actors)
 	    {
-		#print "$_\n";
 		xml_print("\t\t\t\<actor\>$_\<\/actor\>");
 	    }
 	}
@@ -1171,6 +1178,10 @@ sub xml_print_additional_materials($)
 }
 
 # create mandatory programme
+# this function create the xml for all basic entries, like date, tittle, category, start, stop
+# if one of this mandatory parameter is missing the script warns the user but continues...
+#
+# sub xml_print_programme($aProgrammeReference)
 sub xml_print_programme($)
 {
     my $refonprogramme = shift;
@@ -1212,7 +1223,6 @@ sub xml_print_programme($)
     if (defined $programme{'channelid'})
     {
 	$channelid = $programme{'channelid'};
-	#$channel =~ s/\s+//g;
     }
     else
     {
@@ -1301,21 +1311,16 @@ sub xml_print_programme($)
 
 sub xml_create_channels()
 {
-#    my %chaninfo = ();
     foreach (@channellist)
     {
-	#%chaninfo = $_;
-#	xml_print_channel($_);
 	xml_print_channel($_);
     }
-    #exit 82;
 }
 
 sub xml_create_programmes()
 {
     foreach (@programmelist)
     {
-	#print "REF: $_\n";
 	xml_print_programme($_);
     }
 }
@@ -1337,19 +1342,10 @@ sub cleanup_cache()
 
 sub main()
 {
-
-    if ($capabilities)
-    {
-	print "baseline\n";
-	return $success;
-    }
-    print "create temporary directory--> $tmpcache\n" if not $mute;
-    mkpath("$tmpcache");
-
     # grab the main pages containing the channels
     get_main_pages();
     get_channels();
-    
+
     if ($processlocal)
     {
 	print "just parse the files located in the $tmpcache\n" if not $mute;
@@ -1365,7 +1361,6 @@ sub main()
 	extract_info();
 	xml_write();
     }
-    cleanup_cache();
     
     print "
 ===============================================================================
@@ -1388,22 +1383,52 @@ sub script_prefix()
     }
 }
 
-sub script_sufix()
+sub enable_proxy()
 {
-
+    my $setproxy = "set http_proxy=\"$http_proxy\"";
+    
+    if (0 != system($setproxy))
+    {
+	warn("some problem occured when calling system, Could not set the proxy to $setproxy\n");
+    }
+    print "http_proxy = $ENV{'http_proxy'}\n"
 }
 
-# function tests
+sub disable_proxy()
+{
+    my $setproxy = 'export http_proxy';
+    
+    if (0 != system($setproxy))
+    {
+	warn("some problem occured when calling system, Could not set the proxy to $setproxy\n");
+    }
+    print "http_proxy = $ENV{'http_proxy'}\n"
+}
 
+
+sub script_sufix()
+{
+    cleanup_cache();
+    disable_proxy();
+    print "Goodbye\n" if not $mute;
+}
+
+# this function is the first to be called...
+script_prefix();
+# gets the options
+options();
+# checks the options
+check_options();
+# program entry point
+main();
+# this function is the last to be called
+script_sufix();
+
+# function tests
 #combine_dates();
 #my @resu = read_from_file("$tmpcache/16409305.htm");
 #print "RESU: @resu\n"; 
 
-# program entry point
-script_prefix();
-options();
-check_options();
-main();
 #xml_create_programmes();
 
 #get_main_pages();
