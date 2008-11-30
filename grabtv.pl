@@ -411,6 +411,7 @@ sub get_tv_program($)
 		    print "now getting --> $url\n" if not $mute;
 		    if (-e "$tmpcache/$id.htm")
 		    {
+			system("touch $tmpcache/$id.htm");
 			print "$id.htm already exists... Skip Grabbing!\n" if not $mute;
 		    }
 		    else
@@ -1171,7 +1172,9 @@ sub xml_print_additional_materials($)
     }
     if(defined $programme{'rating'})
     {
-	xml_print("\t\t\<rating system=\"VCHIP\"\>\n\t\t\<value\>$programme{'rating'}\<\/value\>\n\t\<\/rating\>");
+	xml_print("\t\t\<rating system=\"VCHIP\"\>");
+	xml_print("\t\t\t\<value\>$programme{'rating'}\<\/value\>");
+	xml_print("\t\t\<\/rating\>");
     }
 
     
