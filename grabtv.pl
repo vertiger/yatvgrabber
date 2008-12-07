@@ -1343,7 +1343,7 @@ sub xml_write()
 #cache clean up function
 sub cleanup_cache()
 {
-    system("find $tmpcache -atime $cache_age_day/ -exec rm -rf \'{}\' +");
+    system("find $tmpcache -atime $cache_age_day -exec rm -f \'{}\' +");
     system("find $tmpcache -empty -exec rm -f \'{}\' +");
 }
 
