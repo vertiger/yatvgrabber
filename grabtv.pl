@@ -461,7 +461,7 @@ sub use_wget($$)
     }
     else
     {
-	system("chmod 666 $tmpcache/$id.htm");
+	chmod( 0666, "$tmpcache/$id.htm");
     }
     return $success;
 }
@@ -1391,6 +1391,7 @@ sub script_prefix()
     {
 	print "create temporary directory--> $tmpcache\n" if not $mute;
 	mkpath("$tmpcache");
+	chmod(0777, "$tmpcache");
     }
 }
 
