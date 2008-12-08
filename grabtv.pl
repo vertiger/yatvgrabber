@@ -411,7 +411,7 @@ sub get_tv_program($$)
 		    print "now getting --> $url\n" if not $mute;
 		    if (-e "$tmpcache/$id.htm")
 		    {
-			system("touch $tmpcache/$id.htm");
+			touch "$tmpcache/$id.htm";
 			print "$id.htm already exists... Skip Grabbing!\n" if not $mute;
 		    }
 		    else
@@ -918,7 +918,7 @@ sub get_main_pages()
 	}
 	else
 	{
-	    system("touch $tmpcache/changroup$groupid.htm");
+	    touch "$tmpcache/changroup$groupid.htm";
 	    print "$tmpcache/changroup$groupid.htm already exists...\n" if not $mute;
 	}
 	@mainpages = (@mainpages, "$tmpcache/changroup$groupid.htm");
