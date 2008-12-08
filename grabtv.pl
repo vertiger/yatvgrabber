@@ -459,6 +459,10 @@ sub use_wget($$)
 	warn("some problem occured when calling system\n");
 	#return $retsyserr;
     }
+    else
+    {
+	system("chmod 666 $tmpcache/$id.htm");
+    }
     return $success;
 }
 
