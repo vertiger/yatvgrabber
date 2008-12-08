@@ -23,6 +23,7 @@ use strict;
 use Getopt::Long;
 require LWP::UserAgent;
 use File::Path; 
+use Time::Local;
 
 #------------------------------------------------------------------------------#
 # Globals
@@ -411,7 +412,7 @@ sub get_tv_program($$)
 		    print "now getting --> $url\n" if not $mute;
 		    if (-e "$tmpcache/$id.htm")
 		    {
-			touch "$tmpcache/$id.htm";
+			utime( time(), time(), "$tmpcache/$id.htm");
 			print "$id.htm already exists... Skip Grabbing!\n" if not $mute;
 		    }
 		    else
@@ -918,7 +919,7 @@ sub get_main_pages()
 	}
 	else
 	{
-	    touch "$tmpcache/changroup$groupid.htm";
+	    utime( time(), time(),  "$tmpcache/changroup$groupid.htm");
 	    print "$tmpcache/changroup$groupid.htm already exists...\n" if not $mute;
 	}
 	@mainpages = (@mainpages, "$tmpcache/changroup$groupid.htm");
