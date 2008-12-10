@@ -249,7 +249,6 @@ off|offset=X => grab tv data setting the begin period to X days (X > 0)
 c|configure => get the channel list, and save it to the $chanconffile file. The user can remove as many channels he does not require. When calling the script, only the channel in this file will be grabbed.
 
 -- NoN Official parameters
-w|week=i => gets program for the number of weeks i E [0..2]
 g|channel-group=i => gets the program for number of groups i E [0..16]
 l|channel-list => gives a list of every tv channel available
 p|process-locally => only create the xmltv data without grabing any file (this work on the local files downloaded during a previous session)
@@ -1017,7 +1016,7 @@ sub xml_print($)
     my $line = shift;
 
     # removing unwanted html tags...
-    $line =~ s/\<br\/\>//g;
+    $line =~ s/\<br\/?\>//g;
     $line =~ s/&/&amp;/g;
     # temporary... because cablecom.tvtv.ch has a problem with c't magazin
     $line =~ s/c\<t/c't/g;
