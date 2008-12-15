@@ -1349,6 +1349,8 @@ sub cleanup_cache()
 {
     system("find $tmpcache -atime $cache_age_day -exec rm -f \'{}\' +");
     system("find $tmpcache -empty -exec rm -f \'{}\' +");
+    system("rm -f $tmpcache/group*");
+    system("rm -f $tmpcache/chan*");
 }
 
 sub main()
