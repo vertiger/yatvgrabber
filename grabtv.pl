@@ -30,11 +30,12 @@ use Time::Local;
 #------------------------------------------------------------------------------#
 my $commonurl = "http://cablecom.tvtv.ch/tvtv";
 my $ua;
-#my $tmpdir = "/tmp/tvgrab";
-my $tmpdir = "/home/$ENV{'USER'}/.tvgrab";
-my $tmpcache = "$tmpdir/cache";
+my $tmpdir = "/etc/yatvgrabber";
+#my $tmpdir = "/home/$ENV{'USER'}/.tvgrab";
+#my $tmpcache = "$tmpdir/cache";
+my $tmpcache = "/var/cache/yatvgrabber";
 my $chanconffile = "$tmpdir/channel.grab";
-my $swap_file = "$tmpdir/tempgrab";
+my $swap_file = "$tmpcache/tempgrab";
 my @useragents = ('Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10_5_5; fr-fr) AppleWebKit/525.18 (KHTML, like Gecko) Version/3.1.2 Safari/525.20.1','Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.9.0.3) Gecko/2008092510 Ubuntu/8.04 (hardy) Firefox/3.0.3','Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.0; SLCC1; .NET CLR 2.0.50727; Media Center PC 5.0; .NET CLR 3.0.04506)');
 my $language = 'de'; # TODO support other languages
 my $wget_timeout = "15";
@@ -1394,6 +1395,12 @@ sub script_prefix()
 	print "create temporary directory--> $tmpcache\n" if not $mute;
 	mkpath("$tmpcache");
 	chmod(0777, "$tmpcache");
+    }
+    if (not -e $tmpdir)
+    {
+	print "create conf directory--> $tmpdir\n" if not $mute;
+	mkpath("$tmpdir");
+	chmod(0777, "$tmpdir");
     }
 }
 
