@@ -1000,7 +1000,7 @@ sub display_channels()
 	$channelname =~ s/&/&amp;/g;
 	
 	print "channel id=${channelid}\t\t\t$channelname\n";
-	print WF "$channelname\n" if ($configure);	
+	print WF "$channelid#$channelname\n" if ($configure);	
     }
 
     print "/------------------------------------------\\\n";
@@ -1292,7 +1292,7 @@ sub xml_print_programme($)
 	$warning++;
     }
 
-    @grepped = grep(/${channelname}/, @validchannels);
+    @grepped = grep(/${channelid}/, @validchannels);
     if (defined $grepped[0])
     {
 
