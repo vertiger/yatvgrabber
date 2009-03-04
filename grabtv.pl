@@ -20,6 +20,8 @@
 #
 
 use strict;
+use threads qw(yield);
+use threads::shared;
 use Getopt::Long;
 require LWP::UserAgent;
 use File::Path;
@@ -56,12 +58,12 @@ my @idlist        = ();
 my @mainpages     = ();
 my @channellist   = ();
 my @validchannels = ();
-my @programmelist = ();
+my @programmelist :shared = ();
 
 # statistics
 my $grabstats  = 0;
 my $lineparsed = 0;
-my $fileparsed = 0;
+my $fileparsed :shared = 0;
 
 # error codes
 my $success     = 0;
@@ -115,6 +117,14 @@ sub options() {
     usage() if $help;
 }
 
+# this function gets a number of days and converts it to a number of days and week
+# for exampke if the user gives 12 days, the grabber will understand that he has to 
+# grab 1 week (0 to 6) and 4 days (0 to 3) from a second week
+# the result is stored in a 2 dimentional array (ndays, nweeks)
+#
+# the input number of days is maximized to 21 as the web site only can provide
+# informations 3 weeks ahead
+#
 sub calculate_date($) {
     my @results = ();
     my $ndays   = shift;
@@ -189,7 +199,7 @@ sub check_options() {
 
         # convert the number of days to days and week
         if ( $nbr_of_days > 0 ) {
-            $nbr_of_days  = $nbr_of_days > 21 ? 21 : $nbr_of_days;
+            #$nbr_of_days  = $nbr_of_days > 21 ? 21 : $nbr_of_days;
             $refonresults = calculate_date($nbr_of_days);
             @results      = @{$refonresults};
             $nbr_of_days  = $results[0];
@@ -373,6 +383,14 @@ sub combine_dates() {
           "something did horribly go wront with the given parameter days...\n";
         exit $retparamerr;
     }
+    # join the threads list
+    foreach (threads->list())
+    {
+	if ($_ != undef)
+	{
+	    $_->join();
+	}
+    }
 }
 
 # TODO use wget for getting the main pages...
@@ -387,6 +405,8 @@ sub get_tv_program($$) {
     my @greppedurl = ();
     my @lines      = ();
     my $id         = 0;
+    my @localidlist = ();
+
 
     print "getting $url save it to $destinationfile\n" if not $mute;
 
@@ -414,9 +434,10 @@ sub get_tv_program($$) {
                           if not $mute;
                     }
                     else {
+			# use thread here
                         use_wget( $url, $id );
-                    }
-                    @idlist = ( @idlist, $id );
+		    }
+		    @localidlist = ( @localidlist, $id );
                 }
                 else {
                     warn(
@@ -426,7 +447,7 @@ sub get_tv_program($$) {
             }
             $grabstats++;
 
-            #last if $grabstats > 5; # DEBUG
+            #last if $grabstats > 80; # DEBUG
         }
 
         #print "URLS: @greppedurl\n";
@@ -434,6 +455,30 @@ sub get_tv_program($$) {
     else {
         warn $response->status_line;
     }
+
+    # use threads to parse every id in the local id list...
+    foreach (@localidlist)
+    {
+	@lines = read_from_file("$tmpcache/$_.htm");
+	threads->create('thread_parser', \@lines);
+	#thread_parser(\@lines);
+    }
+}
+
+
+#
+# this function contains the thread operation on each file...
+# meaning the parser will be threaded here
+# thread_parser($ref_on_lines_array)
+sub thread_parser($)
+{
+    my $refonlines = shift;
+    my @lines = @{$refonlines};
+    
+    threads->yield();
+    # here use a defined number of threads
+    parse_lines(\@lines);
+    $fileparsed += 1;
 }
 
 #use_wget($url, $id)
@@ -481,7 +526,7 @@ sub read_from_file($) {
 sub parse_lines($) {
     my $linesref  = shift;
     my @lines     = @{$linesref};
-    my %programme = ();
+    my %programme :shared = ();
 
     my $extractchan   = 0;
     my $category      = 0;
@@ -818,6 +863,11 @@ sub parse_lines($) {
     @programmelist = ( @programmelist, \%programme );
 }
 
+
+
+# this function will open each id contained in the idlist array
+# it will cqll the parse line function which actually parse all the lines from the page
+#
 sub extract_info() {
     my @lines = ();
 
@@ -826,6 +876,7 @@ sub extract_info() {
         @lines = read_from_file("$tmpcache/$_.htm");
 
         #print "LINES: @lines\n";
+	# here use a defined number of threads
         parse_lines( \@lines );
         $fileparsed += 1;
     }
@@ -841,7 +892,7 @@ sub local_parse_info() {
     #print "INFO IDS: @infolist\n";
     foreach $i (@infolist) {
         @lines = read_from_file($i);
-
+	# 
         #print "LINES: @lines\n";
         print "---> parsing file $i------------------------------------\n"
           if not $mute;
@@ -1246,7 +1297,7 @@ sub xml_write() {
 
 #cache clean up function
 sub cleanup_cache() {
-	# delete old files which have not been touched
+    # delete old files which have not been touched
     system("find $tmpcache -atime $cache_age_day -exec rm -f \'{}\' +");
     # delete all empty files too - could confuse the parser
     system("find $tmpcache -empty -exec rm -f \'{}\' +");
@@ -1272,7 +1323,7 @@ sub main() {
         init_ua_file();
         print "let's grab some tv info...\n" if not $mute;
         combine_dates();
-        extract_info();
+        #extract_info();
         xml_write();
     }
 
@@ -1302,7 +1353,7 @@ sub script_prefix() {
 }
 
 sub script_sufix() {
-    cleanup_cache();
+    #cleanup_cache();
     print "Goodbye\n" if not $mute;
 }
 
