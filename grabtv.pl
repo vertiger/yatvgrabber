@@ -20,7 +20,7 @@
 #
 
 use strict;
-use threads qw(yield);
+use threads;
 use threads::shared;
 use Getopt::Long;
 require LWP::UserAgent;
@@ -73,7 +73,7 @@ my $retsyserr   = 2;
 # get option long
 # use some of the standard option defined by xmltv
 my $mute;
-my $threads = 0;
+my $numberofthreads = 6;
 my $configure;
 my $configurefile;
 my $output;
@@ -88,7 +88,7 @@ my $help;
 #
 my $nbr_of_days;
 my $nbr_of_weeks  = 0;
-my $nbr_of_groups = 0;
+my $nbr_of_groups = 16;
 my $dayoffset     = 0;    # default value = 0 when no offset is defined...
 my $chanlist;
 my $processlocal;
@@ -103,7 +103,7 @@ sub options() {
         "g|channel-group=i" => \$nbr_of_groups,
         "l|channel-list"    => \$chanlist,
         "p|process-locally" => \$processlocal,
-        "t|threads=i"       => \$threads,
+        "t|threads=i"       => \$numberofthreads,
         "ca|capabilities"   => \$capabilities,
         "c|configure"       => \$configure,
         "cf|configure-file" => \$configurefile,
@@ -264,6 +264,7 @@ off|offset=X => grab tv data setting the begin period to X days (X > 0)
 c|configure => get the channel list, and save it to the $chanconffile file. The user can remove as many channels he does not require. When calling the script, only the channel in this file will be grabbed.
 
 -- NoN Official parameters
+t|threads=i => define the number of threads are take to parse the html pages
 g|channel-group=i => gets the program for number of groups i E [0..16]
 l|channel-list => gives a list of every tv channel available
 p|process-locally => only create the xmltv data without grabing any file (this work on the local files downloaded during a previous session)
@@ -271,7 +272,6 @@ h|?|help => display this usage
 ------------------------------------------------------------------------
 NOT YET IMPLEMENTED
 ------------------------------------------------------------------------
-t|threads=i => define the number of threads are take to generate the xml
 v|verbose => make it verbose
 
 Examples:
@@ -383,14 +383,6 @@ sub combine_dates() {
           "something did horribly go wront with the given parameter days...\n";
         exit $retparamerr;
     }
-    # join the threads list
-    foreach (threads->list())
-    {
-	if ($_ != undef)
-	{
-	    $_->join();
-	}
-    }
 }
 
 # TODO use wget for getting the main pages...
@@ -406,8 +398,8 @@ sub get_tv_program($$) {
     my @lines      = ();
     my $id         = 0;
     my @localidlist = ();
-
-
+    #used for getting the localidlist array into equivalent slices
+    
     print "getting $url save it to $destinationfile\n" if not $mute;
 
     #$response = $ua->get($url);
@@ -442,7 +434,7 @@ sub get_tv_program($$) {
                 else {
                     warn(
 "some problems with $_ line\nABORT the local operation...\n"
-                    );
+                    ) if not $mute;
                 }
             }
             $grabstats++;
@@ -456,12 +448,38 @@ sub get_tv_program($$) {
         warn $response->status_line;
     }
 
-    # use threads to parse every id in the local id list...
-    foreach (@localidlist)
+    # join the running threads list (from a previous run)
+    foreach (threads->list())
     {
-	@lines = read_from_file("$tmpcache/$_.htm");
-	threads->create('thread_parser', \@lines);
-	#thread_parser(\@lines);
+		if ($_ != undef)
+		{
+		    $_->join();
+		}
+    }
+
+    #use slice
+    if ($numberofthreads < 1)
+    {
+    	# no threads just call the parser directly
+    	thread_parser( @localidlist);
+    }
+    else
+    {
+	    my $localsize = (int (@localidlist / $numberofthreads) + 1);
+	    my $i;
+	    for ($i = 0; $i < $numberofthreads; $i++)
+	    {
+	    	if ($localsize < @localidlist)
+	    	{
+	    		# will splice the elements
+		   		threads->create('thread_parser', splice @localidlist, 0, $localsize);
+	    	}
+	    	else
+	    	{
+		   		# will a thread for the rest of the list
+	    		threads->create('thread_parser', @localidlist);
+	    	}	
+	    }
     }
 }
 
@@ -470,15 +488,23 @@ sub get_tv_program($$) {
 # this function contains the thread operation on each file...
 # meaning the parser will be threaded here
 # thread_parser($ref_on_lines_array)
-sub thread_parser($)
+sub thread_parser()
 {
-    my $refonlines = shift;
-    my @lines = @{$refonlines};
+    my $file;
+    my @lines = ();
     
-    threads->yield();
-    # here use a defined number of threads
-    parse_lines(\@lines);
-    $fileparsed += 1;
+    while (@_ > 0)
+    {
+    	$file = shift(@_);
+    	
+    	print "$tmpcache/$file.htm\n" if not $mute;
+    	
+    	@lines = read_from_file("$tmpcache/$file.htm");
+    	
+	    parse_lines(\@lines);
+	    $fileparsed += 1;
+    }
+    
 }
 
 #use_wget($url, $id)
@@ -500,7 +526,7 @@ sub use_wget($$) {
     print "wgetcommand: $wgetcommand\n" if not $mute;
 
     if ( 0 != system($wgetcommand) ) {
-        warn("some problem occured when calling system\n");
+        warn("some problem occured when calling system\n") if not $mute;
 
         #return $retsyserr;
     }
@@ -860,7 +886,12 @@ sub parse_lines($) {
         }
     }
     $lineparsed += $i;
-    @programmelist = ( @programmelist, \%programme );
+    {
+    	# the programmelist is not thread-safe -- why not?
+    	lock(@programmelist);
+    	@programmelist = ( @programmelist, \%programme );
+    }
+    
 }
 
 
@@ -1289,6 +1320,16 @@ sub xml_create_programmes() {
 }
 
 sub xml_write() {
+	
+	#join all threaded channels
+    foreach (threads->list())
+    {
+		if ($_ != undef)
+		{
+		    $_->join();
+		}
+    }
+	
     xml_init();
     xml_create_channels();
     xml_create_programmes();
