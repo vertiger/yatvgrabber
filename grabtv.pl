@@ -26,6 +26,8 @@ use Getopt::Long;
 require LWP::UserAgent;
 use File::Path;
 use Time::Local;
+use File::Copy;
+use File::Basename;
 #use PadWalker; #used for debugging
 
 #------------------------------------------------------------------------------#
@@ -34,6 +36,7 @@ use Time::Local;
 my $commonurl = "http://cablecom.tvtv.ch/tvtv";
 my $ua;
 my $tmpdir = "/etc/yatvgrabber";
+my $testdir = "$tmpdir/tests";
 
 #my $tmpdir = "/home/$ENV{'USER'}/.tvgrab";
 #my $tmpcache = "$tmpdir/cache";
@@ -62,7 +65,7 @@ my @programmelist :shared = ();
 
 # statistics
 my $grabstats  = 0;
-my $lineparsed = 0;
+my $lineparsed :shared = 0;
 my $fileparsed :shared = 0;
 
 # error codes
@@ -94,6 +97,7 @@ my $chanlist;
 my $processlocal;
 my $capabilities;
 my $offset;
+my $maketestonerror; # this option will make a test of a file which could not properly be parsed
 
 sub options() {
     GetOptions(
@@ -111,6 +115,7 @@ sub options() {
         "o|output-file=s"   => \$output,
         "off|offset=i"      => \$offset,
         "e|enable-proxy"    => \$enableproxy,
+        "tope|make-test-on-parse-error"    => \$maketestonerror,
         "h|?|help"          => \$help
     ) || die "try -h or --help for more details...";
 
@@ -268,6 +273,7 @@ t|threads=i => define the number of threads are take to parse the html pages
 g|channel-group=i => gets the program for number of groups i E [0..16]
 l|channel-list => gives a list of every tv channel available
 p|process-locally => only create the xmltv data without grabing any file (this work on the local files downloaded during a previous session)
+tope|make-test-on-parse-error => generate a test if a filename fails to be parsed properly 
 h|?|help => display this usage
 ------------------------------------------------------------------------
 NOT YET IMPLEMENTED
@@ -501,8 +507,17 @@ sub thread_parser()
     	
     	@lines = read_from_file("$tmpcache/$file.htm");
     	
-	    parse_lines(\@lines);
-	    $fileparsed += 1;
+	
+	if ($maketestonerror)
+	{
+	    parse_lines(\@lines, "$tmpcache/$file.htm");
+	}
+	else
+	{
+	    parse_lines(\@lines, "");
+	}
+
+	$fileparsed += 1;
     }
     
 }
@@ -511,12 +526,15 @@ sub thread_parser()
 sub use_wget($$) {
     my $url          = shift;
     my $id           = shift;
+    my $useragentsize = @useragents;
+    my $randomagent = int(rand($useragentsize));
     my $wgetquiet    = '';
     my $wgetusragent = "--user-agent=\"$useragents[2]\"";
     my $wgetoptions  = "-nc --random-wait --no-cache --timeout=$wget_timeout";
     my $wgetcommand  = '';
     my $proxycommand = "set http_proxy=\"$http_proxy\"";
 
+    print("use aggent> $randomagent\n") if not $mute;
     $wgetquiet = $mute ? '--quiet' : '';
     $wgetcommand =
 "wget \"$url\" $wgetoptions $wgetusragent -O $tmpcache/$id.htm $wgetquiet";
@@ -547,13 +565,16 @@ sub read_from_file($) {
     return @lines;
 }
 
-# parse_lines($refonlines)
+# parse_lines($refonlines, $idfilename)
 # depends on the language
-sub parse_lines($) {
+# the second parameter is optional $idfilename
+# this will be used for create test cases on the file which 
+# encounter parse problems
+sub parse_lines($$) {
     my $linesref  = shift;
     my @lines     = @{$linesref};
     my %programme :shared = ();
-
+    my $idfilename = shift if $maketestonerror;
     my $extractchan   = 0;
     my $category      = 0;
     my $land          = 0;
@@ -572,6 +593,8 @@ sub parse_lines($) {
     my $musicleader   = 0;
     my $i             = 0;
 
+    # make a test on parse error
+    $programme{'idfilename'} = "$idfilename" if $maketestonerror;
     #print "LINES: @lines\n";
     foreach (@lines) {
         $i++;
@@ -908,7 +931,7 @@ sub extract_info() {
 
         #print "LINES: @lines\n";
 	# here use a defined number of threads
-        parse_lines( \@lines );
+        parse_lines( \@lines, "");
         $fileparsed += 1;
     }
 }
@@ -925,9 +948,15 @@ sub local_parse_info() {
         @lines = read_from_file($i);
 	# 
         #print "LINES: @lines\n";
-        print "---> parsing file $i------------------------------------\n"
-          if not $mute;
-        parse_lines( \@lines );
+        print "---> parsing file $i------------------------------------\n" if not $mute;
+	if ($maketestonerror)
+	{
+	    parse_lines( \@lines, "$i");
+	}
+	else
+	{
+	    parse_lines( \@lines, "");
+	}
         $fileparsed += 1;
     }
 }
@@ -1297,14 +1326,27 @@ sub xml_print_programme($) {
             xml_print("\t\<\/programme\>");
         }
         else {
-            warn(
-"some mandatory keys are missing take a look to the following hash: warning nr: $warning\n"
-            );
-            foreach ( keys(%programme) ) {
+            warn("some mandatory keys are missing take a look to the following hash: warning nr: $warning\n");
+            foreach ( keys(%programme) ) 
+	    {
                 print STDERR "key: $_ -> $programme{$_}\n";
             }
+	    if($maketestonerror)
+	    {
+		copyfiletotest($programme{'idfilename'});
+	    }
         }
     }
+}
+
+#sub copyfiletotest($filename)
+sub copyfiletotest($)
+{
+    my $filename = shift;
+
+    print("error parse in file> $filename\n");
+    copy("$filename", "$testdir/" . basename("$filename"));
+
 }
 
 sub xml_create_channels() {
@@ -1391,6 +1433,12 @@ sub script_prefix() {
         mkpath("$tmpdir");
         chmod( 0777, "$tmpdir" );
     }
+    if ( not -e $testdir ) {
+        print "create conf directory--> $testdir\n" if not $mute;
+        mkpath("$testdir");
+        chmod( 0777, "$testdir" );
+    }
+    
 }
 
 sub script_sufix() {
