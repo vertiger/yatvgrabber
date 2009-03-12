@@ -23,31 +23,27 @@ use strict;
 use threads;
 use threads::shared;
 use Getopt::Long;
-require LWP::UserAgent;
 use File::Path;
-use Time::Local;
 use File::Copy;
 use File::Basename;
-#use PadWalker; #used for debugging
+use Time::Local;
+use Sys::CPU; #install libsys-cpu-perl in ubuntu
 
 #------------------------------------------------------------------------------#
 # Globals
 #------------------------------------------------------------------------------#
 my $commonurl = "http://cablecom.tvtv.ch/tvtv";
-my $ua;
-my $tmpdir = "/etc/yatvgrabber";
-my $testdir = "$tmpdir/tests";
-
-#my $tmpdir = "/home/$ENV{'USER'}/.tvgrab";
-#my $tmpcache = "$tmpdir/cache";
+my $tmpdir 		 = "/etc/yatvgrabber";
+my $testdir 	 = "$tmpdir/tests";
+my $configurefile = "$tmpdir/channel.grab";
 my $tmpcache     = "/var/cache/yatvgrabber";
-my $chanconffile = "$tmpdir/channel.grab";
 my $swap_file    = "$tmpcache/tempgrab";
 my @useragents   = (
 'Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10_5_5; fr-fr) AppleWebKit/525.18 (KHTML, like Gecko) Version/3.1.2 Safari/525.20.1',
 'Mozilla/5.0 (X11; U; Linux x86_64; en-US; rv:1.9.0.6) Gecko/2009020519 Ubuntu/9.04 (jaunty) Firefox/3.0.6',
 'Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.0; SLCC1; .NET CLR 2.0.50727; Media Center PC 5.0; .NET CLR 3.0.04506)'
 );
+my $rand_agent_number = int(rand(@useragents));
 my $language     = 'de';    # TODO support other languages
 my $wget_timeout = "15";
 
@@ -75,46 +71,119 @@ my $retsyserr   = 2;
 
 # get option long
 # use some of the standard option defined by xmltv
-my $mute;
-my $numberofthreads = 6;
+my $no_cache_clean;
+my $numberofthreads = Sys::CPU::cpu_count();
 my $configure;
-my $configurefile;
 my $output;
-my $verbose;
+my $verbose = 0;
 my $help;
 
-# per default it just gets the tv program from the actual day on the main chan.
+# per default it gets the tv program from max days and groups.
 # the number of days the grabber has to get
 #
 # As the cablecom site works with the followinf parameter in its address
 #
 #
-my $nbr_of_days;
-my $nbr_of_weeks  = 0;
+my $nbr_of_days   = 20;
 my $nbr_of_groups = 16;
-my $dayoffset     = 0;    # default value = 0 when no offset is defined...
-my $chanlist;
 my $processlocal;
-my $capabilities;
-my $offset;
 my $maketestonerror; # this option will make a test of a file which could not properly be parsed
 
+# prototypes
+sub script_prefix;
+sub main;
+sub script_sufix;
+
+# this function is the first to be called...
+script_prefix();
+
+# program entry point
+main();
+
+# this function is the last to be called
+script_sufix();
+
+sub main() {
+
+	# main programm switch
+	if ($configure) {
+		
+		# configure (only get the channel info with one day)
+		$nbr_of_days = 0;
+		$nbr_of_groups = 16;
+		
+	    get_groups();
+	    write_channels();
+	    
+	} else {
+		
+		# or program grabber
+		generate_valid_channels();
+		
+		get_groups();
+		xml_write();
+	}
+
+    return $success;
+}
+
+sub script_prefix() {
+    if ( not -e $tmpcache ) {
+        print "create temporary directory--> $tmpcache\n" if ($verbose > 1);
+        mkpath("$tmpcache");
+        chmod( 0777, "$tmpcache" );
+    }
+    if ( not -e $tmpdir ) {
+        print "create conf directory--> $tmpdir\n" if ($verbose > 1);
+        mkpath("$tmpdir");
+        chmod( 0777, "$tmpdir" );
+    }
+    if ( not -e $testdir ) {
+        print "create test directory--> $testdir\n" if ($verbose > 1);
+        mkpath("$testdir");
+        chmod( 0777, "$testdir" );
+    }
+    
+    # delete all empty files - could confuse the parser / file getter
+    system("find $tmpcache -empty -exec rm -f \'{}\' +") if (-e $tmpcache);
+
+	# gets the options
+	options();
+	
+	# checks the options
+	check_options();
+}
+
+sub script_sufix() {
+    # delete all empty files - could confuse the parser / file getter
+    system("find $tmpcache -empty -exec rm -f \'{}\' +") if (-e $tmpcache);
+    # delete old files which have not been touched - only if not grabbing for tomorrow
+    system("find $tmpcache -atime $cache_age_day -exec rm -f \'{}\' +") if not $no_cache_clean;
+
+    print "
+===============================================================================
+= Grabber Stats...
+===============================================================================
+\t\t$grabstats cast program were downloaded...
+\t\t$fileparsed files were parsed...
+\t\t$lineparsed lines were parsed...
+Goodbye\n
+" if ($verbose > 1);
+}
+
+# parse the script options
 sub options() {
     GetOptions(
-        "q|quiet"           => \$mute,
         "d|days=i"          => \$nbr_of_days,
-        "w|week=i"          => \$nbr_of_weeks,
         "g|channel-group=i" => \$nbr_of_groups,
-        "l|channel-list"    => \$chanlist,
         "p|process-locally" => \$processlocal,
         "t|threads=i"       => \$numberofthreads,
-        "ca|capabilities"   => \$capabilities,
         "c|configure"       => \$configure,
         "cf|configure-file" => \$configurefile,
-        "v|verbose"         => \$verbose,
+        "v|verbose=i"       => \$verbose,
         "o|output-file=s"   => \$output,
-        "off|offset=i"      => \$offset,
         "e|enable-proxy"    => \$enableproxy,
+        "ncc|no-cache-clean"=> \$no_cache_clean,
         "tope|make-test-on-parse-error"    => \$maketestonerror,
         "h|?|help"          => \$help
     ) || die "try -h or --help for more details...";
@@ -122,138 +191,42 @@ sub options() {
     usage() if $help;
 }
 
-# this function gets a number of days and converts it to a number of days and week
-# for exampke if the user gives 12 days, the grabber will understand that he has to 
-# grab 1 week (0 to 6) and 4 days (0 to 3) from a second week
-# the result is stored in a 2 dimentional array (ndays, nweeks)
-#
-# the input number of days is maximized to 21 as the web site only can provide
-# informations 3 weeks ahead
-#
-sub calculate_date($) {
-    my @results = ();
-    my $ndays   = shift;
-
-    $ndays = $ndays > 21 ? 21 : $ndays;
-    @results =
-        ( ( $ndays > 6 ) and ( ( $ndays % 7 ) == 0 ) )
-      ? ( 6, ( ( $ndays / 7 ) - 1 ) )
-      : ( ( ( $ndays % 7 ) - 1 ), int( $ndays / 7 ) );
-
-    return \@results;
-}
-
 # this function checks the option given to the script
 # with the given --days the check option calculate the number of weeks and the rest of the available days...
 sub check_options() {
-    my $tmpdays      = 0;
-    my $refonresults = 0;
-    my @results      = ();
 
-    # print capabilities
-    if ($capabilities) {
-        print "baseline\n";
-        return $success;
-    }
-
-    # display the channel list
-    if ($chanlist) {
-        list_of_channels();
-        exit $success;
-    }
+    # limit the number of days to grab
+    $nbr_of_days = 20 if ($nbr_of_days > 20);
+    $nbr_of_days = 0 if ($nbr_of_days < 0);
+    
+    # limit the groups to get
+    $nbr_of_groups = 16 if ($nbr_of_groups > 16);
+    $nbr_of_groups = 0 if ($nbr_of_groups < 0);
 
     # configure channel valid list
-    if ($configure) {
-        if ( not -e "$chanconffile" ) {
-            list_of_channels();
-        }
-        else {
-            warn
-"Generation FAILED, the $chanconffile channel configuration file already exits (delete the file, and launch the script again, this will regenerate the channel listing $chanconffile)\n";
-        }
-        exit $success;
-    }
+    warn "WARNING: the $configurefile channel configuration file already exits\n" if ($configure and -e "$configurefile" );
+    # warn if both ncc and process local is active
+    warn "WARNING: both process local and no cache clean are active - using no cache clean\n" if ($no_cache_clean and $processlocal);
 
     # return an error if the --days parameter is missing
     if (    not defined $nbr_of_days
-        and not defined $chanlist
         and not defined $configure )
     {
-        print STDERR
-"one of the following parameters are mandatory: --days X --configure --channel-list\n";
+        print STDERR "one of the following parameters are mandatory: --days X --configure --channel-list\n";
         exit $retparamerr;
     }
-    elsif ( not -e "$chanconffile" ) {
-        warn
-"the $chanconffile channel configuration file is missing, please call the --configure option first.\n";
+    if (not $configure and not -e "$configurefile" ) {
+        warn "the $configurefile channel configuration file is missing, please call the --configure option first.\n";
         exit $retsyserr;
-    }
-    elsif ( defined $nbr_of_days ) {
-
-        # gen the channel list the user wants to grab
-        generate_valid_channels();
-
-        # set temp days
-        $tmpdays = $nbr_of_days;
-
-# set the offset if the option is used otherwise the dayoffset is 0 initial value
-        if ( defined $offset ) {
-            $dayoffset = $offset;
-            $nbr_of_days += $offset;
-        }
-
-        # convert the number of days to days and week
-        if ( $nbr_of_days > 0 ) {
-            #$nbr_of_days  = $nbr_of_days > 21 ? 21 : $nbr_of_days;
-            $refonresults = calculate_date($nbr_of_days);
-            @results      = @{$refonresults};
-            $nbr_of_days  = $results[0];
-            $nbr_of_weeks = $results[1];
-            print "days=$nbr_of_days, weeks=$nbr_of_weeks\n" if not $mute;
-        }
-        else {
-            print STDERR
-              "the following parameter --days should have an int value > 0\n";
-            exit $retparamerr;
-        }
-
-        if ( defined $offset ) {
-
-            if ( $dayoffset > 0 ) {
-                if ( ( $dayoffset + $tmpdays ) > 21 ) {
-                    print STDERR
-"the $dayoffset offset and the $nbr_of_days days to grab are exceading the maximum grab value (21)... the script tries to reduce the offset\n";
-                    $dayoffset = 21 - $tmpdays;
-                }
-                $refonresults = calculate_date($dayoffset);
-                @results      = @{$refonresults};
-                $dayoffset    = $results[0] + 1;
-                $nbr_of_weeks = $results[1];
-                print
-"OFFSET odays=$dayoffset weeks=$nbr_of_weeks gdays=$nbr_of_days\n";
-
-                #exit 82;
-            }
-            else {
-                print STDERR
-"the following parameter --offset should have an int value > 0\n";
-                exit $retparamerr;
-            }
-        }
     }
 }
 
 sub generate_valid_channels() {
-    print "loading the $chanconffile configuration file...\n" if not $mute;
-    @validchannels = read_from_file("$chanconffile");
-    chop(@validchannels);
-    print "authorised channel list: @validchannels\n" if not $mute;
-}
-
-sub list_of_channels() {
-    get_main_pages();
-    get_channels();
-    display_channels();
+    print "loading the $configurefile configuration file...\n" if ($verbose > 1);
+    foreach (read_from_file("$configurefile")) {
+    	push ( @validchannels, $1) if (m/(\d+)/);
+    }
+    print "authorised channel list: @validchannels\n" if ($verbose > 1);
 }
 
 sub usage() {
@@ -262,23 +235,16 @@ this is the $0 usage
 
 -- Official parameters:
 o|output-file=s => define a output filename for the xml.
-ca|capabilities => displays the grabber capabilities {baseline, manualconfig, apiconfig}
-q|quiet => make it quiet, only display error messages on STDERR
-d|days=x => grab tv data for x days counting from now! (x > 0)
-off|offset=X => grab tv data setting the begin period to X days (X > 0)
-c|configure => get the channel list, and save it to the $chanconffile file. The user can remove as many channels he does not require. When calling the script, only the channel in this file will be grabbed.
+d|days=x => grab tv data for x days counting from now! [0..20]
+c|configure => get the channel list, and save it to the $configurefile file. The user can remove as many channels he does not require. When calling the script, only the channel in this file will be grabbed.
 
 -- NoN Official parameters
-t|threads=i => define the number of threads are take to parse the html pages
+t|threads=i => define the number of threads are take to parse the html pages (default autoset) [0..]
 g|channel-group=i => gets the program for number of groups i E [0..16]
-l|channel-list => gives a list of every tv channel available
 p|process-locally => only create the xmltv data without grabing any file (this work on the local files downloaded during a previous session)
-tope|make-test-on-parse-error => generate a test if a filename fails to be parsed properly 
+tope|make-test-on-parse-error => generate a test if a filename fails to be parsed properly
 h|?|help => display this usage
-------------------------------------------------------------------------
-NOT YET IMPLEMENTED
-------------------------------------------------------------------------
-v|verbose => make it verbose
+v|verbose=i => make it verbose, [default 0]
 
 Examples:
 # first you have to grab a channel list
@@ -287,8 +253,6 @@ $0 --configure
 $0 --channel-list
 # this will grab every tv program for every channels (-g option set to 16) and stores the results in test.xml
 $0 -d 6 -g 16 -o test.xml
-# this will grab the tv data for every channel for 3 weeks (-w 2) an stores the results in test.xml
-$0 -d 6 -w 2 -g 16 -o test.xml
 
 AUTHORS:
 * keller_e 
@@ -297,97 +261,59 @@ AUTHORS:
     exit 1;
 }
 
-sub init_ua_file {
-    $ua = LWP::UserAgent->new();    # the user agent does http request
-    $ua->timeout(60);
-    $ua->env_proxy;
-}
+# get the group pages
+#   create the group page urls and pass them to the get programm function
+sub get_groups() {
+    my $dayid;
+    my $weekid;
+    my $groupid;
+    my $url;
+    my $file;
+    my @lines = ();
 
-#dayid 0..6
-#weekid 0..2
-#groupid 0..16 # attention 11 adult content --babslouloute
-# the maximum days in advance to grab is 21 :)
-# so if the days are < 7 0..6 and the week is = 0
-# if  8 < days < 14 the day is mod 7 and the week = 1
-# if 15 < days <= 21 day is mod 7 and week is 2
-sub combine_dates() {
-    my $dayid   = 0;
-    my $weekid  = 0;
-    my $groupid = 0;
-    my $url     = 'none';
-
-    if ( $nbr_of_weeks == 1 ) {
-        print "in the week = 1 case\n";
-        for $groupid ( 0 .. $nbr_of_groups ) {
-            if ( not defined $offset ) {
-                $weekid = 0;
-
-                # the first week do all the 6 days
-                for $dayid ( 0 .. 6 ) {
-                    $url =
-"$commonurl/index.vm?dayId=${dayid}&weekId=${weekid}&groupid=${groupid}&lang=de&epgView=list";
-                    print "URL:$url\n";
-                    get_tv_program( $url,
-                        "group${groupid}-week${weekid}-day${dayid}" );
-                }
-            }
-            $weekid = 1;
-
-            # the second week = 1 just get the rest of the days
-            for $dayid ( $dayoffset .. $nbr_of_days ) {
-                $url =
-"$commonurl/index.vm?dayId=${dayid}&weekId=${weekid}&groupid=${groupid}&lang=de&epgView=list";
-                print "URL:$url\n";
-                get_tv_program( $url,
-                    "group${groupid}-week${weekid}-day${dayid}" );
-            }
-        }
-    }
-    elsif ( $nbr_of_weeks == 2 ) {
-        print "in the week = 2 case\n";
-        for $groupid ( 0 .. $nbr_of_groups ) {
-            if ( not defined $offset ) {
-                for $weekid ( 0 .. 1 ) {
-
-                    # the first week do all the 6 days
-                    for $dayid ( 0 .. 6 ) {
-                        $url =
-"$commonurl/index.vm?dayId=${dayid}&weekId=${weekid}&groupid=${groupid}&lang=de&epgView=list";
-                        print "URL:$url\n";
-                        get_tv_program( $url,
-                            "group${groupid}-week${weekid}-day${dayid}" );
-                    }
-                }
-            }
-            $weekid = 2;
-
-            # the second week = 1 just get the rest of the days
-            for $dayid ( $dayoffset .. $nbr_of_days ) {
-                $url =
-"$commonurl/index.vm?dayId=${dayid}&weekId=${weekid}&groupid=${groupid}&lang=de&epgView=list";
-                print "URL:$url\n";
-                get_tv_program( $url,
-                    "group${groupid}-week${weekid}-day${dayid}" );
+    for (0 .. $nbr_of_days) {
+    	$dayid = $_ % 7;
+    	$weekid = int($_ / 7);
+    	
+        for $groupid (0 .. $nbr_of_groups) {
+           	$url = "$commonurl/index.vm?dayId=${dayid}&weekId=${weekid}&groupid=${groupid}&lang=de&epgView=list";
+            $file = "$tmpcache/group${groupid}-week${weekid}-day${dayid}.htm";
+            print "URL:$url\n" if $verbose;
+            
+            if ($processlocal and not $no_cache_clean)
+            {
+            	# only parse the local available files
+            	if (-e $file) {
+            		@lines = read_from_file( $file);
+            		
+	              	# parse the channel info
+	              	if ($success == parse_channel( \@lines)) {
+		              	# get the programs from that page
+		              	get_tv_program( \@lines) if not $configure;
+	              	}
+            	} else {
+            		warn "unable to find $file" if $verbose;
+            	} 
+            	           	
+            } else {
+	            unlink $file if (-e $file);                
+            	
+            	## get the group page from the web
+	            if ($success == use_wget( $url, $file))
+	            {
+            		@lines = read_from_file( $file);
+            		
+	              	# parse the channel info
+	              	if ($success == parse_channel( \@lines)) {
+		              	# get the programs from that page
+		              	get_tv_program( \@lines) if not $configure;
+	              	}
+	              	
+	            } else {
+	                warn "unable to get $url" if $verbose; 
+	            }
             }
         }
-    }
-    elsif ( $nbr_of_weeks == 0 ) {
-        print "in the week = 0 case\n";
-        for $groupid ( 0 .. $nbr_of_groups ) {
-            $weekid = 0;
-            for $dayid ( $dayoffset .. $nbr_of_days ) {
-                $url =
-"$commonurl/index.vm?dayId=${dayid}&weekId=${weekid}&groupid=${groupid}&lang=de&epgView=list";
-                print "URL:$url\n";
-                get_tv_program( $url,
-                    "group${groupid}-week${weekid}-day${dayid}" );
-            }
-        }
-    }
-    else {
-        print STDERR
-          "something did horribly go wront with the given parameter days...\n";
-        exit $retparamerr;
     }
 }
 
@@ -396,71 +322,47 @@ sub combine_dates() {
 # the url is generated by the combine_dates() function
 # this function will grab in the defined tmpdir directory all the casts
 # using the system call to wget --> much quicker than perl get!
-sub get_tv_program($$) {
-    my $url             = shift;
-    my $destinationfile = shift;
-    my $response;
-    my @greppedurl = ();
-    my @lines      = ();
-    my $id         = 0;
+sub get_tv_program($) {
+    my @lines      = @{shift @_};
+    my @greppedurl = grep { /programdetails.vm?/ } @lines;
+
+	my $url;
+    my $id;
+    my $file;
     my @localidlist = ();
     #used for getting the localidlist array into equivalent slices
     
-    print "getting $url save it to $destinationfile\n" if not $mute;
-
-    #$response = $ua->get($url);
-    #if ($response->is_success)
-    if ( $success == use_wget( $url, $destinationfile ) ) {
-
-        #print MYOUTFILE $response->content;  # or whatever
-        #@lines = split /\s+/, $response->content;
-        @lines = read_from_file("$tmpcache/${destinationfile}.htm");
-
-        #print "LINES: @lines\n";
-        @greppedurl = grep( /programdetails.vm?/, @lines );
-
-        foreach (@greppedurl) {
-            if ( $_ =~ /.*programmeId=(\d+)&lang.*/ ) {
-                $id = $1;
-                if ( defined $id ) {
-                    $url =
-"$commonurl/web/programdetails.vm?programmeId=${id}&lang=de&epgView=list&groupid=0";
-                    print "now getting --> $url\n" if not $mute;
-                    if ( -e "$tmpcache/$id.htm" ) {
-                        utime( time(), time(), "$tmpcache/$id.htm" );
-                        print "$id.htm already exists... Skip Grabbing!\n"
-                          if not $mute;
-                    }
-                    else {
-			# use thread here
-                        use_wget( $url, $id );
+    foreach (@greppedurl) {
+        if ( $_ =~ /.*programmeId=(\d+)&lang.*/ ) {
+            $id = $1;
+            $file = "$tmpcache/$id.htm";
+            
+            # delete the file for no cache clean
+            unlink $file if ($no_cache_clean and -e $file);
+            
+            $url = "$commonurl/web/programdetails.vm?programmeId=${id}&lang=de&epgView=list";
+            if (($processlocal and not $no_cache_clean) or -e $file ) {
+                # check if the file is available
+                next if (not -e $file);
+                	
+                # reset the mod time 
+                utime( time(), time(), $file );
+                    
+                print "$id.htm already exists... Skip Grabbing!\n" if ($verbose > 1);
+            } else {
+                next if ($success != use_wget( $url, $file ));
 		    }
-		    @localidlist = ( @localidlist, $id );
-                }
-                else {
-                    warn(
-"some problems with $_ line\nABORT the local operation...\n"
-                    ) if not $mute;
-                }
-            }
-            $grabstats++;
-
-            #last if $grabstats > 80; # DEBUG
-        }
-
-        #print "URLS: @greppedurl\n";
+		    push( @localidlist, $id );
+    	}
+        $grabstats++;
     }
-    else {
-        warn $response->status_line;
-    }
+    # only continue, if ids are available in the local list
+    return if not (@localidlist > 0);
 
     # join the running threads list (from a previous run)
     foreach (threads->list())
     {
-		if ($_ != undef)
-		{
-		    $_->join();
-		}
+	    $_->join();
     }
 
     #use slice
@@ -472,8 +374,7 @@ sub get_tv_program($$) {
     else
     {
 	    my $localsize = (int (@localidlist / $numberofthreads) + 1);
-	    my $i;
-	    for ($i = 0; $i < $numberofthreads; $i++)
+	    for (1 .. $numberofthreads)
 	    {
 	    	if ($localsize < @localidlist)
 	    	{
@@ -482,42 +383,32 @@ sub get_tv_program($$) {
 	    	}
 	    	else
 	    	{
-		   		# will a thread for the rest of the list
+		   		# will create a thread for the rest of the list
 	    		threads->create('thread_parser', @localidlist);
 	    	}	
 	    }
     }
 }
 
-
 #
 # this function contains the thread operation on each file...
 # meaning the parser will be threaded here
-# thread_parser($ref_on_lines_array)
+# thread_parser(@ids_of_files_to_parse)
 sub thread_parser()
 {
-    my $file;
     my @lines = ();
     
-    while (@_ > 0)
+    foreach (@_)
     {
-    	$file = shift(@_);
-    	
-    	print "$tmpcache/$file.htm\n" if not $mute;
-    	
-    	@lines = read_from_file("$tmpcache/$file.htm");
-    	
-	
-	if ($maketestonerror)
-	{
-	    parse_lines(\@lines, "$tmpcache/$file.htm");
-	}
-	else
-	{
-	    parse_lines(\@lines, "");
-	}
-
-	$fileparsed += 1;
+    	if (defined $_)
+    	{
+	    	print "$tmpcache/$_.htm\n" if ($verbose > 1);
+	    	
+	    	@lines = read_from_file("$tmpcache/$_.htm");
+	    	
+		    ($maketestonerror) ? parse_lines(\@lines, "$tmpcache/$_.htm") : parse_lines(\@lines, "");
+		    $fileparsed += 1;
+    	}
     }
     
 }
@@ -525,31 +416,22 @@ sub thread_parser()
 #use_wget($url, $id)
 sub use_wget($$) {
     my $url          = shift;
-    my $id           = shift;
-    my $useragentsize = @useragents;
-    my $randomagent = int(rand($useragentsize));
-    my $wgetquiet    = '';
-    my $wgetusragent = "--user-agent=\"$useragents[2]\"";
+    my $file         = shift;
+    my $wgetquiet    = ($verbose < 2) ? '--quiet' : '';
+    my $wgetusragent = "--user-agent=\"$useragents[$rand_agent_number]\"";
     my $wgetoptions  = "-nc --random-wait --no-cache --timeout=$wget_timeout";
-    my $wgetcommand  = '';
     my $proxycommand = "set http_proxy=\"$http_proxy\"";
 
-    print("use aggent> $randomagent\n") if not $mute;
-    $wgetquiet = $mute ? '--quiet' : '';
-    $wgetcommand =
-"wget \"$url\" $wgetoptions $wgetusragent -O $tmpcache/$id.htm $wgetquiet";
+    my $wgetcommand = "wget \"$url\" $wgetoptions $wgetusragent -O $file $wgetquiet";
 
     # use the Tor proxy
     $wgetcommand = "$proxycommand; $wgetcommand" if $enableproxy;
-    print "wgetcommand: $wgetcommand\n" if not $mute;
+    print "wgetcommand: $wgetcommand\n" if ($verbose > 1);
 
     if ( 0 != system($wgetcommand) ) {
-        warn("some problem occured when calling system\n") if not $mute;
-
-        #return $retsyserr;
-    }
-    else {
-        chmod( 0666, "$tmpcache/$id.htm" );
+        warn("some problem occured when calling system\n") if ($verbose > 1);
+    } else { 
+        chmod( 0666, $file );
     }
     return $success;
 }
@@ -557,24 +439,22 @@ sub use_wget($$) {
 # read_from_file($filename)
 sub read_from_file($) {
     my $filename = shift;
-    my @lines    = ();
 
     open( FILE, "$filename" );
-    @lines = <FILE>;
+    my @lines = <FILE>;
+    close FILE;
 
     return @lines;
 }
 
 # parse_lines($refonlines, $idfilename)
 # depends on the language
-# the second parameter is optional $idfilename
-# this will be used for create test cases on the file which 
-# encounter parse problems
 sub parse_lines($$) {
-    my $linesref  = shift;
-    my @lines     = @{$linesref};
+    my @lines     = @{shift @_};
     my %programme :shared = ();
-    my $idfilename = shift if $maketestonerror;
+    
+    my $idfilename = shift @_ if $maketestonerror;
+
     my $extractchan   = 0;
     my $category      = 0;
     my $land          = 0;
@@ -593,48 +473,48 @@ sub parse_lines($$) {
     my $musicleader   = 0;
     my $i             = 0;
 
-    # make a test on parse error
-    $programme{'idfilename'} = "$idfilename" if $maketestonerror;
     #print "LINES: @lines\n";
     foreach (@lines) {
-        $i++;
 
         # extarct the channel id
         # hbx.pn="SF ZWEI (900)";//PAGE NAME(S)
         if ( $_ =~ /hbx.pn=".*\((.*)\)".*/ ) {
-            print "CHANID: $1\n" if ( defined $1 and not $mute );
-            $programme{'channelid'} = "$1" if defined $1;
+            print "CHANID: $1\n" if ( defined $1 and ($verbose > 1) );
+            $programme{'channelid'} = "$1";
+            
+            # next file if this is no valid channel
+            return if (not grep { $_ == $1} @validchannels);
         }
 
         # extract cast type
         if ( $_ =~ /Film/ ) {
-            print "cast Type: Film\n" if not $mute;
+            print "cast Type: Film\n" if ($verbose > 1);
             $programme{'programmetype'} = "Film";
             #next;
         }
         if ( $_ =~ /Serie/ ) {
-            print "cast Type: Serie\n" if not $mute;
+            print "cast Type: Serie\n" if ($verbose > 1);
             $programme{'programmetype'} = "Serie";
             #next;
         }
 
         # extract title
         if ( $_ =~ /fb-b15">(.*)<\/span.*/ ) {
-            print "TITLE: $1\n" if ( defined $1 and not $mute );
+            print "TITLE: $1\n" if ( defined $1 and ($verbose > 1) );
             $programme{'title'} = "$1" if defined $1;
             #next;
         }
 
         # extract episode
         if ( $_ =~ /fn-b9">(.*)<\/span.*/ ) {
-            print "FOLGE: $1\n" if ( defined $1 and not $mute );
+            print "FOLGE: $1\n" if ( defined $1 and ($verbose > 1) );
             $programme{'episode'} = "$1" if defined $1;
             #next;
         }
 
         # extraction of the description
         if ( $_ =~ /fn-b10">(.*)<\/span.*/ ) {
-            print "DESC: $1\n" if ( defined $1 and not $mute );
+            print "DESC: $1\n" if ( defined $1 and ($verbose > 1) );
             $programme{'desc'} = "$1" if defined $1;
             #next;
         }
@@ -642,7 +522,7 @@ sub parse_lines($$) {
         # extraction of the date
         if ( $_ =~ /fn-w8".*>(.*),\s+(\d+.\d+.\d+)<\/t.*/ ) {
             print "Date: $1, $2\n"
-              if ( defined $1 and defined $2 and not $mute );
+              if ( defined $1 and defined $2 and ($verbose > 1) );
             $programme{'dayoftheweek'} = "$1" if defined $1;
             $programme{'date'}         = "$2" if defined $2;
             #next;
@@ -650,17 +530,17 @@ sub parse_lines($$) {
 
         # extraction of the begin end time
         if ( $_ =~ /fn-b8".*>Beginn:\s+(\d+:\d+).*<\/t.*/ ) {
-            print "\tTime Start: $1\n" if ( defined $1 and not $mute );
+            print "\tTime Start: $1\n" if ( defined $1 and ($verbose > 1) );
             $programme{'start'} = "$1" if defined $1;
             #next;
         }
         if ( $_ =~ /fn-b8".*>Ende:\s+(\d+:\d+).*<\/t.*/ ) {
-            print "\tTime End: $1\n" if ( defined $1 and not $mute );
+            print "\tTime End: $1\n" if ( defined $1 and ($verbose > 1) );
             $programme{'stop'} = "$1" if defined $1;
             #next;
         }
         if ( $_ =~ /fn-b8".*>Länge:\s+(\d+).*<\/t.*/ ) {
-            print "\tcast Time: $1 min.\n" if ( defined $1 and not $mute );
+            print "\tcast Time: $1 min.\n" if ( defined $1 and ($verbose > 1) );
             $programme{'timeduration'} = "$1" if defined $1;
             #next;
         }
@@ -672,7 +552,7 @@ sub parse_lines($$) {
         }
         if ( $actors == 1 ) {
             if ( $_ =~ /.*fn-b8">(.*)<\/span.*/ ) {
-                print "Staring: $1\n" if ( defined $1 and not $mute );
+                print "Staring: $1\n" if ( defined $1 and ($verbose > 1) );
                 $programme{'actors'} = "$1" if defined $1;
             }
             $actors = 0;
@@ -686,7 +566,7 @@ sub parse_lines($$) {
         }
         if ( $producer == 1 ) {
             if ( $_ =~ /.*fn-b8">(.*)<\/span.*/ ) {
-                print "Regie: $1\n" if ( defined $1 and not $mute );
+                print "Regie: $1\n" if ( defined $1 and ($verbose > 1) );
 
                 $programme{'director'} = "$1" if defined $1;
                 $programme{'director'} =~ s/\<show_pers\.php3\?cle=\d+\>//g;
@@ -703,7 +583,7 @@ sub parse_lines($$) {
         }
         if ( $author == 1 ) {
             if ( $_ =~ /.*fn-b8">(.*)<\/span.*/ ) {
-                print "Authors: $1\n" if ( defined $1 and not $mute );
+                print "Authors: $1\n" if ( defined $1 and ($verbose > 1) );
                 $programme{'writer'} .= "$1" if defined $1;
             }
             $author = 0;
@@ -717,7 +597,7 @@ sub parse_lines($$) {
         }
         if ( $category == 1 ) {
             if ( $_ =~ /.*fn-b8">(.*)<\/span.*/ ) {
-                print "Category: $1\n" if ( defined $1 and not $mute );
+                print "Category: $1\n" if ( defined $1 and ($verbose > 1) );
                 $programme{'category'} = "$1" if defined $1;
             }
             $category = 0;
@@ -731,7 +611,7 @@ sub parse_lines($$) {
         }
         if ( $land == 1 ) {
             if ( $_ =~ /.*fn-b8">(.*)<.*/ ) {
-                print "Land: $1\n" if ( defined $1 and not $mute );
+                print "Land: $1\n" if ( defined $1 and ($verbose > 1) );
                 $programme{'country'} = "$1" if defined $1;
             }
             $land = 0;
@@ -746,7 +626,7 @@ sub parse_lines($$) {
         if ( $kidprotection == 1 ) {
             if ( $_ =~ /.*fn-b8">(.*)<\/span.*/ ) {
                 print "Not Allowed for Kid under: $1\n"
-                  if ( defined $1 and not $mute );
+                  if ( defined $1 and ($verbose > 1) );
                 $programme{'rating'} = "$1" if defined $1;
             }
             $kidprotection = 0;
@@ -760,7 +640,7 @@ sub parse_lines($$) {
         }
         if ( $filmeditor == 1 ) {
             if ( $_ =~ /.*fn-b8">(.*)<\/span.*/ ) {
-                print "Film Editor: $1\n" if ( defined $1 and not $mute );
+                print "Film Editor: $1\n" if ( defined $1 and ($verbose > 1) );
                 $programme{'filmeditor'} = "$1" if defined $1;
             }
             $filmeditor = 0;
@@ -774,7 +654,7 @@ sub parse_lines($$) {
         }
         if ( $production == 1 ) {
             if ( $_ =~ /.*fn-b8">(.*)<\/span.*/ ) {
-                print "Studio Production: $1\n" if ( defined $1 and not $mute );
+                print "Studio Production: $1\n" if ( defined $1 and ($verbose > 1) );
                 $programme{'studio'} = "$1" if defined $1;
             }
             $production = 0;
@@ -788,7 +668,7 @@ sub parse_lines($$) {
         }
         if ( $productor == 1 ) {
             if ( $_ =~ /.*fn-b8">(.*)<\/span.*/ ) {
-                print "Producer: $1\n" if ( defined $1 and not $mute );
+                print "Producer: $1\n" if ( defined $1 and ($verbose > 1) );
                 $programme{'producer'} = "$1" if defined $1;
             }
             $productor = 0;
@@ -802,7 +682,7 @@ sub parse_lines($$) {
         }
         if ( $script == 1 ) {
             if ( $_ =~ /.*fn-b8">(.*)<\/span.*/ ) {
-                print "script: $1\n" if ( defined $1 and not $mute );
+                print "script: $1\n" if ( defined $1 and ($verbose > 1) );
                 $programme{'writer'} .= "$1" if defined $1;
             }
             $script = 0;
@@ -816,7 +696,7 @@ sub parse_lines($$) {
         }
         if ( $music == 1 ) {
             if ( $_ =~ /.*fn-b8">(.*)<\/span.*/ ) {
-                print "Music: $1\n" if ( defined $1 and not $mute );
+                print "Music: $1\n" if ( defined $1 and ($verbose > 1) );
                 $programme{'musicauthor'} = "$1" if defined $1;
             }
             $music = 0;
@@ -830,7 +710,7 @@ sub parse_lines($$) {
         }
         if ( $camera == 1 ) {
             if ( $_ =~ /.*fn-b8">(.*)<\/span.*/ ) {
-                print "Camera: $1\n" if ( defined $1 and not $mute );
+                print "Camera: $1\n" if ( defined $1 and ($verbose > 1) );
                 $programme{'camera'} = "$1" if defined $1;
             }
             $camera = 0;
@@ -844,7 +724,7 @@ sub parse_lines($$) {
         }
         if ( $originaltitle == 1 ) {
             if ( $_ =~ /.*fn-b8">(.*)<\/span.*/ ) {
-                print "Original Title: $1\n" if ( defined $1 and not $mute );
+                print "Original Title: $1\n" if ( defined $1 and ($verbose > 1) );
                 $programme{'sub-title'} = "$1" if defined $1;
             }
             $originaltitle = 0;
@@ -858,7 +738,7 @@ sub parse_lines($$) {
         }
         if ( $presentator == 1 ) {
             if ( $_ =~ /.*fn-b8">(.*)<\/span.*/ ) {
-                print "presented by: $1\n" if ( defined $1 and not $mute );
+                print "presented by: $1\n" if ( defined $1 and ($verbose > 1) );
                 $programme{'presenter'} = "$1" if defined $1;
             }
             $presentator = 0;
@@ -872,7 +752,7 @@ sub parse_lines($$) {
         }
         if ( $musicleader == 1 ) {
             if ( $_ =~ /.*fn-b8">(.*)<\/span.*/ ) {
-                print "Music chef: $1\n" if ( defined $1 and not $mute );
+                print "Music chef: $1\n" if ( defined $1 and ($verbose > 1) );
                 $programme{'musicchef'} = "$1" if defined $1;
             }
             $musicleader = 0;
@@ -883,120 +763,47 @@ sub parse_lines($$) {
         # depends on the web language
         # this first implementation just use german :)
         if ( $_ =~ /Stereo/ ) {
-            print "AUDIO=Stereo\n" if not $mute;
+            print "AUDIO=Stereo\n" if ($verbose > 1);
             $programme{'audio'} = "stereo";
             #next;
         }
         if ( $_ =~ /16:9 video format/ ) {
-            print "VIDEO=16:9 video format\n" if not $mute;
+            print "VIDEO=16:9 video format\n" if ($verbose > 1);
             $programme{'aspect'} = "16:9";
             #next;
         }
         if ( $_ =~ /Mehrsprachig/ ) {
-            print "Multilangue: Mehrsprachig\n" if not $mute;
+            print "Multilangue: Mehrsprachig\n" if ($verbose > 1);
             $programme{'languages'} = "multi";
             #next;
         }
         if ( $_ =~ /High Definition Video/ ) {
-            print "HDTV: High Definition Video\n" if not $mute;
+            print "HDTV: High Definition Video\n" if ($verbose > 1);
             $programme{'quality'} = "HDTV";
             #next;
         }
         if ( $_ =~ /Surround Sound/ ) {
-            print "Audio: Surround Sound\n" if not $mute;
+            print "Audio: Surround Sound\n" if ($verbose > 1);
             $programme{'audiotype'} = "surround";
             #next;
         }
     }
     $lineparsed += $i;
-    {
-    	# the programmelist is not thread-safe -- why not?
-    	lock(@programmelist);
-    	@programmelist = ( @programmelist, \%programme );
-    }
-    
-}
 
-
-
-# this function will open each id contained in the idlist array
-# it will cqll the parse line function which actually parse all the lines from the page
-#
-sub extract_info() {
-    my @lines = ();
-
-    print "ID LIST: @idlist\n" if $verbose and not $mute;
-    foreach (@idlist) {
-        @lines = read_from_file("$tmpcache/$_.htm");
-
-        #print "LINES: @lines\n";
-	# here use a defined number of threads
-        parse_lines( \@lines, "");
-        $fileparsed += 1;
-    }
-}
-
-sub local_parse_info() {
-    my @infolist = ();
-    my $i;
-    my @lines = ();
-
-    @infolist = glob("$tmpcache/[0-9]*.htm");
-
-    #print "INFO IDS: @infolist\n";
-    foreach $i (@infolist) {
-        @lines = read_from_file($i);
-	# 
-        #print "LINES: @lines\n";
-        print "---> parsing file $i------------------------------------\n" if not $mute;
-	if ($maketestonerror)
-	{
-	    parse_lines( \@lines, "$i");
-	}
-	else
-	{
-	    parse_lines( \@lines, "");
-	}
-        $fileparsed += 1;
-    }
-}
-
-# get a list of the available channels...
-sub get_main_pages() {
-    my $groupid;
-    my $url;
-
-    foreach $groupid ( 0 .. 16 ) {
-        $url =
-"$commonurl/index.vm?dayId=0&weekId=0&groupid=${groupid}&lang=de&epgView=list";
-        if ( not -e "$tmpcache/changroup$groupid.htm" ) {
-            use_wget( $url, "changroup$groupid" );
-        }
-        else {
-            utime( time(), time(), "$tmpcache/changroup$groupid.htm" );
-            print "$tmpcache/changroup$groupid.htm already exists...\n"
-              if not $mute;
-        }
-        @mainpages = ( @mainpages, "$tmpcache/changroup$groupid.htm" );
-    }
-}
-
-sub get_channels() {
-    my @lines = ();
-
-    foreach (@mainpages) {
-        print "opening $_\n" if not $mute;
-        @lines = read_from_file("$_");
-        parse_channel( \@lines );
-    }
+	# add the parsed programm to the programm list
+	$programme{'idfilename'} = "$idfilename" if $maketestonerror;
+   	push( @programmelist, \%programme );
 }
 
 # parse_channel($refonlines)
+#   returns $success, if one channel of this group is in the valid channels list
 sub parse_channel($) {
-    my $refonlines   = shift;
-    my @lines        = @{$refonlines};
-    my $chanlogolink = '';
+    my @lines        = @{shift @_};
+    my $chanlogolink;
+    my $channame;
     my %chaninfo     = ();
+    my $channelid;
+    my $returnCode = -1;
 
     foreach (@lines) {
 
@@ -1005,60 +812,73 @@ sub parse_channel($) {
 #if ($_ =~ /fb-w10\" style=.*>(.*)<\/div>/)
         if ( $_ =~ /<td><img src="(.*channelLogo.*)"\s+border.*alt="(.*)".*/ ) {
 
-            $chanlogolink = $1 if defined $1;
-            $chaninfo{'link'} = $chanlogolink;
-            $chaninfo{'name'} = $2 if defined $2;
+			$chanlogolink = $1;
+			$channame     = $2;
             $chanlogolink =~ m/.*channelLogo=(\d+)/;
-            $chaninfo{'id'} = $1 if defined $1;
+            $channelid    = $1; 
 
- # this{%chaninfo} will create a unique pointer reference on the %chaninfo hash.
- # it is like pass the reference by copy...
-            @channellist = ( @channellist, {%chaninfo} );
-            if ( $verbose and not $mute ) {
-                print "channel Logolink= $chaninfo{'id'}\n";
-                print "channel Logolink= $chaninfo{'link'}\n";
-                print "channel Logolink= $chaninfo{'name'}\n";
+			# only save channels which are in the config file
+			next if ((not $configure) and (not grep { $_ == $channelid} @validchannels));
+			
+			# report found channel
+			$returnCode = $success;
+			
+			# only save channels which are not already in the list
+			next if (grep { ${$_}{'id'} == $channelid} @channellist);
+            
+            $chaninfo{'id'} = $1;
+            $chaninfo{'name'} = $channame if $channame;
+            $chaninfo{'link'} = $chanlogolink;
+
+			# this{%chaninfo} will create a unique pointer reference on the %chaninfo hash.
+			# it is like pass the reference by copy...
+            push( @channellist, {%chaninfo} );
+            if ( $verbose > 1 ) {
+                print "channel id  = $chaninfo{'id'}\n";
+                print "channel name= $chaninfo{'name'}\n";
+                print "channel link= $chaninfo{'link'}\n";
             }
         }
     }
+    return $returnCode;
+}
+
+#sub copyfiletotest($filename)
+sub copyfiletotest($)
+{
+	my $filename = shift;
+ 
+	print("error parse in file> $filename\n");
+ 	copy("$filename", "$testdir/" . basename("$filename"));
 }
 
 # this function display all the channels available on the given website...
-sub display_channels() {
+sub write_channels() {
     my $nbrchan      = @channellist;
-    my %chaninfo     = ();
     my $channelid    = '';
     my $channelname  = '';
-    my $chanlogolink = '';
 
     print "/------------------------------------------\\\n";
     print "| Channel List                             |\n";
     print "\------------------------------------------/\n";
-    print "from: $commonurl...\nto: $chanconffile\n";
+    print "from: $commonurl...\nto: $configurefile\n";
 
-    if ($configure) {
-        open( WF, ">$chanconffile" )
-          or warn "could not create the $chanconffile file $!";
-    }
+    open( WF, ">$configurefile" ) or (warn "could not create the $configurefile file $!" and die);
 
     foreach (@channellist) {
 
-        %chaninfo     = %{$_};
-        $channelid    = $chaninfo{'id'};
-        $channelname  = $chaninfo{'name'};
-        $chanlogolink = $chaninfo{'link'};
-
-        $channelname =~ s/&/&amp;/g;
+        $channelid    = ${$_}{'id'};
+        $channelname  = ${$_}{'name'};
 
         print "channel id=${channelid}\t\t\t$channelname\n";
-        print WF "$channelid#$channelname\n" if ($configure);
+        print WF "$channelid#$channelname\n";
     }
 
     print "/------------------------------------------\\\n";
     print "| Found $nbrchan Channels\n";
     print "\------------------------------------------/\n";
-    print "from: $commonurl...\nto: $chanconffile\n";
-    close(WF) if $configure;
+    print "from: $commonurl...\nto: $configurefile\n";
+    close(WF);
 }
 
 # xml_print($aline)
@@ -1067,92 +887,71 @@ sub xml_print($) {
     my $line = shift;
 
     # removing unwanted html tags...
-    $line =~ s/\<br\/?\>//g;
-    $line =~ s/&/&amp;/g;
+    #$line =~ s/\<br\/?\>//g;
+    #$line =~ s/&/&amp;/g;
 
     # temporary... because cablecom.tvtv.ch has a problem with c't magazin
-    $line =~ s/c\<t/c't/g;
+    #$line =~ s/c\<t/c't/g;
 
-    if ($output) {
-        print XMLFILE "$line\n";
-    }
-    else {
-        print "$line\n";
-    }
+    $output ? print XMLFILE "$line\n" : print "$line\n";
 }
 
 sub xml_init() {
-
     # write xml in a file...
-    if ($output) {
-        open( XMLFILE, ">$output" );
-    }
-    xml_print(
-        "<tv generator-info-name=\"yagraber\" source-info-url=\"$commonurl\">");
+    open( XMLFILE, ">$output" ) if ($output);
+    xml_print( "<tv generator-info-name=\"yagraber\" source-info-url=\"$commonurl\">");
 }
 
 sub xml_close() {
     xml_print("</tv>");
-    if ($output) {
-        close(XMLFILE);
-    }
-
+    close(XMLFILE) if ($output);
 }
 
+# create the head of the xml file
+#   containing the channels with icons
 sub xml_print_channel($) {
-    my $refonchaninfo = shift;
-    my %chaninfo      = %{$refonchaninfo};
-
-    #my %chaninfo = shift(@_);
+    my %chaninfo      = %{shift @_};
     my $channelid    = $chaninfo{'id'};
     my $channelname  = $chaninfo{'name'};
     my $chanlogolink = $chaninfo{'link'};
-    my @grepped      = ();
 
     $channelname =~ s/&/&amp;/g;
-    @grepped = grep( /${channelname}/, @validchannels );
-    if ( defined $grepped[0] ) {
-        xml_print("\t\<channel id=\"channel.${channelid}\"\>");
-        xml_print(
-"\t\t\<display-name lang=\"$language\"\>$channelname\<\/display-name\>"
-        );
-        xml_print("\t\t\<icon src=\"${chanlogolink}\"\/\>");
-        xml_print("\t\<\/channel\>");
-    }
+
+    xml_print("\t\<channel id=\"${channelid}\"\>");
+    xml_print("\t\t\<display-name lang=\"$language\"\>$channelname\<\/display-name\>");
+    xml_print("\t\t\<icon src=\"${chanlogolink}\"\/\>");
+    xml_print("\t\<\/channel\>");
 }
 
-# create bonnus entries
+# create bonus entries
 # this function checks if there are more information contained in the programme hash table, like
 # actors, description, subtitle, original title, producer, writer, audio format video format, ...
 #
 # sub xml_print_additional_materials($aProgrammeReference)
 sub xml_print_additional_materials($) {
-    my $refonprogramme = shift;
-    my %programme      = %{$refonprogramme};
+    my %programme      = %{shift @_};
 
     # locals
     my $description = '';
-    my @actors      = ();
     my $credits     = 0;
     my $subtitle    = '';
 
     # non mandatory parameters... Bonus if it's existing
     # sub title, original title
     if ( defined $programme{'sub-title'} ) {
-        $subtitle = $programme{'sub-title'};
+        chomp( $subtitle = $programme{'sub-title'});
         $subtitle =~ s/&/&amp;/g;
-        xml_print(
-            "\t\<sub-title lang=\"${language}\"\>${subtitle}\<\/sub-title\>");
+        $subtitle =~ s/c\<t/c't/g;
+        xml_print("\t\t\<sub-title lang=\"${language}\"\>${subtitle}\<\/sub-title\>");
     }
 
     # description
     if ( defined $programme{'desc'} ) {
-        $description = $programme{'desc'};
+        chomp( $description = $programme{'desc'});
         $description =~ s/&/&amp;/g;
         $description =~ s/\<.*\>//g;
-        xml_print(
-            "\t\t\<desc lang=\"${language}\"\>\n${description}\n\t\t\<\/desc\>"
-        );
+        $description =~ s/c\<t/c't/g;
+        xml_print("\t\t\<desc lang=\"${language}\"\>${description}\t\t\<\/desc\>");
     }
 
     # credits authors, actors, regie, producer, ...
@@ -1164,71 +963,39 @@ sub xml_print_additional_materials($) {
         or defined $programme{'commentator'}
         or defined $programme{'guest'} )
     {
-
         # any of the credits contents will write the credit xml tag
         xml_print("\t\t\<credits\>");
-
-        if ( defined $programme{'director'} ) {
-            xml_print("\t\t\t\<director\>$programme{'director'}\<\/director\>");
-        }
-
         # add the actors
         if ( defined $programme{'actors'} ) {
-            @actors = split( ', ', $programme{'actors'} );
-            foreach (@actors) {
+            foreach (split( ', ', $programme{'actors'} )) {
                 xml_print("\t\t\t\<actor\>$_\<\/actor\>");
             }
         }
-
-        if ( defined $programme{'writer'} ) {
-            xml_print("\t\t\t\<writer\>$programme{'writer'}\<\/writer\>");
-        }
-        if ( defined $programme{'adapter'} ) {
-            xml_print("\t\t\t\<adapter\>$programme{'adapter'}\<\/adapter\>");
-        }
-        if ( defined $programme{'producer'} ) {
-            xml_print("\t\t\t\<producer\>$programme{'producer'}\<\/producer\>");
-        }
-        if ( defined $programme{'presenter'} ) {
-            xml_print(
-                "\t\t\t\<presenter\>$programme{'presenter'}\<\/presenter\>");
-        }
-        if ( defined $programme{'commentator'} ) {
-            xml_print(
-"\t\t\t\<commentator\>$programme{'commentator'}\<\/commentator\>"
-            );
-        }
-        if ( defined $programme{'guest'} ) {
-            xml_print("\t\t\t\<guest\>$programme{'guest'}\<\/guest\>");
-        }
-
-        #$credits++;
+        xml_print("\t\t\t\<director\>$programme{'director'}\<\/director\>") if ( defined $programme{'director'} );
+        xml_print("\t\t\t\<writer\>$programme{'writer'}\<\/writer\>") if ( defined $programme{'writer'} );
+        xml_print("\t\t\t\<adapter\>$programme{'adapter'}\<\/adapter\>") if ( defined $programme{'adapter'} );
+        xml_print("\t\t\t\<producer\>$programme{'producer'}\<\/producer\>") if ( defined $programme{'producer'} );
+        xml_print("\t\t\t\<presenter\>$programme{'presenter'}\<\/presenter\>") if ( defined $programme{'presenter'} );
+        xml_print("\t\t\t\<commentator\>$programme{'commentator'}\<\/commentator\>") if ( defined $programme{'commentator'} );
+        xml_print("\t\t\t\<guest\>$programme{'guest'}\<\/guest\>") if ( defined $programme{'guest'} );
         xml_print("\t\t\<\/credits\>");
     }
 
     if ( defined $programme{'audio'} or defined $programme{'audiotype'} ) {
         xml_print("\t\t\<audio\>");
-        xml_print("\t\t\t\<stereo\>$programme{'audio'}\<\/stereo\>")
-          if defined $programme{'audio'};
-        xml_print("\t\t\t\<stereo\>$programme{'audiotype'}\<\/stereo\>")
-          if defined $programme{'audiotype'};
+        xml_print("\t\t\t\<stereo\>$programme{'audio'}\<\/stereo\>") if defined $programme{'audio'};
+        xml_print("\t\t\t\<stereo\>$programme{'audiotype'}\<\/stereo\>") if defined $programme{'audiotype'};
         xml_print("\t\t\<\/audio\>");
     }
     if ( defined $programme{'aspect'} or defined $programme{'quality'} ) {
         xml_print("\t\t\<video\>");
-        xml_print("\t\t\t\<aspect\>$programme{'aspect'}\<\/aspect\>")
-          if defined $programme{'aspect'};
-        xml_print("\t\t\t\<quality\>$programme{'quality'}\<\/quality\>")
-          if defined $programme{'quality'};
+        xml_print("\t\t\t\<aspect\>$programme{'aspect'}\<\/aspect\>") if defined $programme{'aspect'};
+        xml_print("\t\t\t\<quality\>$programme{'quality'}\<\/quality\>") if defined $programme{'quality'};
         xml_print("\t\t\<\/video\>");
     }
 
     # filming country
-    if ( defined $programme{'country'} ) {
-        xml_print(
-"\t\t\<country lang=\"${language}\"\>$programme{'country'}\<\/country\>"
-        );
-    }
+    xml_print("\t\t\<country lang=\"${language}\"\>$programme{'country'}\<\/country\>") if ( defined $programme{'country'} );
     if ( defined $programme{'rating'} ) {
         xml_print("\t\t\<rating system=\"VCHIP\"\>");
         xml_print("\t\t\t\<value\>$programme{'rating'}\<\/value\>");
@@ -1243,20 +1010,17 @@ sub xml_print_additional_materials($) {
 #
 # sub xml_print_programme($aProgrammeReference)
 sub xml_print_programme($) {
-    my $refonprogramme = shift;
-    my %programme      = %{$refonprogramme};
+    my %programme      = %{shift @_};
 
     # locals
     my $date          = '';
-    my $channelid     = '';
+    my $channelid     = $programme{'channelid'}; # channel id is always defined
     my $title         = '';
     my $start         = '';
     my $end           = '';
     my $category      = '';
-    my @categories    = ();
     my $programmetype = '';
     my $warning       = 0;
-    my @grepped       = ();
 
     if ( defined $programme{'date'} ) {
         $date = $programme{'date'};
@@ -1267,16 +1031,10 @@ sub xml_print_programme($) {
         print STDERR "missing date\n";
         $warning++;
     }
-    if ( defined $programme{'channelid'} ) {
-        $channelid = $programme{'channelid'};
-    }
-    else {
-        print STDERR "missing channelid\n";
-        $warning++;
-    }
     if ( defined $programme{'title'} ) {
-        $title = $programme{'title'};
+        chomp($title = $programme{'title'});
         $title =~ s/&/&amp;/g;
+        $title =~ s/c\<t/c't/g;
     }
     else {
         print STDERR "missing title\n";
@@ -1308,169 +1066,48 @@ sub xml_print_programme($) {
         }
     }
 
-    @grepped = grep( /${channelid}/, @validchannels );
-    if ( defined $grepped[0] ) {
-
-        if ( $warning == 0 ) {
-            xml_print(
-"\t\<programme start=\"${date}${start}\" stop=\"${date}${end}\" channel=\"channel.${channelid}\"\>"
-            );
-            xml_print("\t\t\<title lang=\"${language}\"\>${title}\<\/title\>");
-            xml_print("\t\t\<date\>${date}\<\/date>");
-            @categories = split( ', ', $category );
-            foreach (@categories) {
-                xml_print(
-                    "\t\t\<category lang=\"${language}\"\>$_\<\/category\>");
-            }
-            xml_print_additional_materials( \%programme );
-            xml_print("\t\<\/programme\>");
+    if ( $warning == 0 ) {
+        xml_print("\t\<programme start=\"${date}${start}\" stop=\"${date}${end}\" channel=\"channel.${channelid}\"\>");
+        xml_print("\t\t\<title lang=\"${language}\"\>${title}\<\/title\>");
+        xml_print("\t\t\<date\>${date}\<\/date>");
+        foreach (split( ', ', $category)) {
+            xml_print("\t\t\<category lang=\"${language}\"\>$_\<\/category\>");
         }
-        else {
-            warn("some mandatory keys are missing take a look to the following hash: warning nr: $warning\n");
-            foreach ( keys(%programme) ) 
-	    {
-                print STDERR "key: $_ -> $programme{$_}\n";
-            }
-	    if($maketestonerror)
-	    {
-		copyfiletotest($programme{'idfilename'});
-	    }
+        xml_print_additional_materials( \%programme );
+        xml_print("\t\<\/programme\>");
+    }
+    else {
+        warn("some mandatory keys are missing take a look to the following hash: warning nr: $warning\n");
+        foreach ( keys(%programme) ) {
+            print STDERR "key: $_ -> $programme{$_}\n";
         }
+        copyfiletotest($programme{'idfilename'}) if ($maketestonerror);
     }
 }
 
-#sub copyfiletotest($filename)
-sub copyfiletotest($)
-{
-    my $filename = shift;
-
-    print("error parse in file> $filename\n");
-    copy("$filename", "$testdir/" . basename("$filename"));
-
-}
-
-sub xml_create_channels() {
-    foreach (@channellist) {
-        xml_print_channel($_);
-    }
-}
-
-sub xml_create_programmes() {
-    foreach (@programmelist) {
-        xml_print_programme($_);
-    }
-}
-
+# main function to write the xml information
+#   writes the header, channels info, programs to the 
+#	xml file (at this order)
 sub xml_write() {
 	
-	#join all threaded channels
+	my $channelid;
+	
+	#join all threaded channel parsers
     foreach (threads->list())
     {
-		if ($_ != undef)
-		{
-		    $_->join();
-		}
+	    $_->join();
     }
 	
     xml_init();
-    xml_create_channels();
-    xml_create_programmes();
+    
+    foreach (@channellist) {
+    	$channelid = ${$_}{'id'};
+        xml_print_channel($_) if (defined $channelid);
+    }
+    foreach (@programmelist) {
+    	$channelid = ${$_}{'channelid'};
+        xml_print_programme($_) if (defined $channelid);
+    }
+    
     xml_close();
 }
-
-#cache clean up function
-sub cleanup_cache() {
-    # delete old files which have not been touched
-    system("find $tmpcache -atime $cache_age_day -exec rm -f \'{}\' +");
-    # delete all empty files too - could confuse the parser
-    system("find $tmpcache -empty -exec rm -f \'{}\' +");
-    
-    # delete the group and channel file to always renew that information
-    system("rm -f $tmpcache/group*");
-    system("rm -f $tmpcache/chan*");
-}
-
-sub main() {
-
-    # grab the main pages containing the channels
-    get_main_pages();
-    get_channels();
-
-    if ($processlocal) {
-        print "just parse the files located in the $tmpcache\n" if not $mute;
-        local_parse_info();
-        xml_write();
-    }
-    else {
-        print "initialise the grabber...\n" if not $mute;
-        init_ua_file();
-        print "let's grab some tv info...\n" if not $mute;
-        combine_dates();
-        #extract_info();
-        xml_write();
-    }
-
-    print "
-===============================================================================
-= Grabber Stats...
-===============================================================================
-\t\t$grabstats cast program were downloaded...
-\t\t$fileparsed files were parsed...
-\t\t$lineparsed lines were parsed...
-
-" if not $mute;
-    return $success;
-}
-
-sub script_prefix() {
-    if ( not -e $tmpcache ) {
-        print "create temporary directory--> $tmpcache\n" if not $mute;
-        mkpath("$tmpcache");
-        chmod( 0777, "$tmpcache" );
-    }
-    if ( not -e $tmpdir ) {
-        print "create conf directory--> $tmpdir\n" if not $mute;
-        mkpath("$tmpdir");
-        chmod( 0777, "$tmpdir" );
-    }
-    if ( not -e $testdir ) {
-        print "create conf directory--> $testdir\n" if not $mute;
-        mkpath("$testdir");
-        chmod( 0777, "$testdir" );
-    }
-    
-}
-
-sub script_sufix() {
-    #cleanup_cache();
-    print "Goodbye\n" if not $mute;
-}
-
-# this function is the first to be called...
-script_prefix();
-
-# gets the options
-options();
-
-# checks the options
-check_options();
-
-# program entry point
-main();
-
-# this function is the last to be called
-script_sufix();
-
-# function tests
-#combine_dates();
-#my @resu = read_from_file("$tmpcache/16409305.htm");
-#print "RESU: @resu\n";
-
-#xml_create_programmes();
-
-#get_main_pages();
-#get_channels();
-
-#my $size = @channellist;
-#print "Parsed $size channels\n@channellist\n";
-#xml_write();

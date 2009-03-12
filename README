@@ -47,25 +47,14 @@ $> perl ./grabtv.pl -h
 -o|--output-file aFileName
 => define a output filename for the xml.
 
--ca|--capabilities
-=> displays the grabber capabilities {baseline, manualconfig, apiconfig}
-
--q|--quiet
-=> make it quiet, only display error messages on STDERR
-
 -d|--days nbrOfDaysToGrab
 => grab tv data for x days counting from now! (x > 0)
-
--off|--offset aOffsetWhenStart2Grab
-=> grab tv data setting the begin period to X days (X > 0)
 
 -h|-?|--|help 
 => display this usage
 
 
 -- NoN Official (TBD)
--d|--day=i=> gets program for the number of days i E [0..6]
--w|--week=i => gets program for the number of weeks i E [0..2]
 -g|--channel-group=i => gets the program for number of groups i E [0..16]
 -l|--channel-list => gives a list of every tv channel available
 -p|--process-locally => only create the xmltv data without grabing any file (this work on the local files downloaded during a previous session)
