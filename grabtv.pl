@@ -71,7 +71,7 @@ my $retsyserr   = 2;
 
 # get option long
 # use some of the standard option defined by xmltv
-my $no_cache_clean;
+my $no_cleanup;
 my $numberofthreads = Sys::CPU::cpu_count();
 my $configure;
 my $output;
@@ -158,7 +158,7 @@ sub script_sufix() {
     # delete all empty files - could confuse the parser / file getter
     system("find $tmpcache -empty -exec rm -f \'{}\' +") if (-e $tmpcache);
     # delete old files which have not been touched - only if not grabbing for tomorrow
-    system("find $tmpcache -atime $cache_age_day -exec rm -f \'{}\' +") if not $no_cache_clean;
+    system("find $tmpcache -atime $cache_age_day -exec rm -f \'{}\' +") if not $no_cleanup;
 
     print "
 ===============================================================================
@@ -183,7 +183,7 @@ sub options() {
         "v|verbose=i"       => \$verbose,
         "o|output-file=s"   => \$output,
         "e|enable-proxy"    => \$enableproxy,
-        "ncc|no-cache-clean"=> \$no_cache_clean,
+        "nc|no-cleanup"		=> \$no_cleanup,
         "tope|make-test-on-parse-error"    => \$maketestonerror,
         "h|?|help"          => \$help
     ) || die "try -h or --help for more details...";
@@ -205,17 +205,9 @@ sub check_options() {
 
     # configure channel valid list
     warn "WARNING: the $configurefile channel configuration file already exits\n" if ($configure and -e "$configurefile" );
-    # warn if both ncc and process local is active
-    warn "WARNING: both process local and no cache clean are active - using no cache clean\n" if ($no_cache_clean and $processlocal);
 
-    # return an error if the --days parameter is missing
-    if (    not defined $nbr_of_days
-        and not defined $configure )
-    {
-        print STDERR "one of the following parameters are mandatory: --days X --configure --channel-list\n";
-        exit $retparamerr;
-    }
-    if (not $configure and not -e "$configurefile" ) {
+    # return an error if the config file is missing
+    if (not -e "$configurefile" ) {
         warn "the $configurefile channel configuration file is missing, please call the --configure option first.\n";
         exit $retsyserr;
     }
@@ -242,7 +234,8 @@ c|configure => get the channel list, and save it to the $configurefile file. The
 t|threads=i => define the number of threads are take to parse the html pages (default autoset) [0..]
 g|channel-group=i => gets the program for number of groups i E [0..16]
 p|process-locally => only create the xmltv data without grabing any file (this work on the local files downloaded during a previous session)
-tope|make-test-on-parse-error => generate a test if a filename fails to be parsed properly
+tope|make-test-on-parse-error => generate a test if a filename fails to be parsed properly [default off]
+nc|no-cleanup => do no cleanup after parsing [default off]
 h|?|help => display this usage
 v|verbose=i => make it verbose, [default 0]
 
@@ -280,10 +273,11 @@ sub get_groups() {
             $file = "$tmpcache/group${groupid}-week${weekid}-day${dayid}.htm";
             print "URL:$url\n" if $verbose;
             
-            if ($processlocal and not $no_cache_clean)
+            if ($processlocal)
             {
             	# only parse the local available files
             	if (-e $file) {
+            		# read the file
             		@lines = read_from_file( $file);
             		
 	              	# parse the channel info
@@ -337,22 +331,18 @@ sub get_tv_program($) {
             $id = $1;
             $file = "$tmpcache/$id.htm";
             
-            # delete the file for no cache clean
-            unlink $file if ($no_cache_clean and -e $file);
-            
-            $url = "$commonurl/web/programdetails.vm?programmeId=${id}&lang=de&epgView=list";
-            if (($processlocal and not $no_cache_clean) or -e $file ) {
+            # deletion of file is not needed (content of programm is not changing, instead ids on the group page change)
+            if ($processlocal or -e $file) {
                 # check if the file is available
                 next if (not -e $file);
                 	
-                # reset the mod time 
-                utime( time(), time(), $file );
-                    
                 print "$id.htm already exists... Skip Grabbing!\n" if ($verbose > 1);
             } else {
+            	# download the file
+            	$url = "$commonurl/web/programdetails.vm?programmeId=${id}&lang=de&epgView=list";
                 next if ($success != use_wget( $url, $file ));
 		    }
-		    push( @localidlist, $id );
+		    push( @localidlist, $file );
     	}
         $grabstats++;
     }
@@ -402,11 +392,11 @@ sub thread_parser()
     {
     	if (defined $_)
     	{
-	    	print "$tmpcache/$_.htm\n" if ($verbose > 1);
+	    	print "$_\n" if ($verbose > 1);
 	    	
-	    	@lines = read_from_file("$tmpcache/$_.htm");
+	    	@lines = read_from_file($_);
 	    	
-		    ($maketestonerror) ? parse_lines(\@lines, "$tmpcache/$_.htm") : parse_lines(\@lines, "");
+		    ($maketestonerror) ? parse_lines(\@lines, $_) : parse_lines(\@lines, "");
 		    $fileparsed += 1;
     	}
     }
@@ -440,6 +430,9 @@ sub use_wget($$) {
 sub read_from_file($) {
     my $filename = shift;
 
+	# reset time to refect access
+	utime( time(), time(), $filename );
+	
     open( FILE, "$filename" );
     my @lines = <FILE>;
     close FILE;
@@ -490,59 +483,49 @@ sub parse_lines($$) {
         if ( $_ =~ /Film/ ) {
             print "cast Type: Film\n" if ($verbose > 1);
             $programme{'programmetype'} = "Film";
-            #next;
         }
         if ( $_ =~ /Serie/ ) {
             print "cast Type: Serie\n" if ($verbose > 1);
             $programme{'programmetype'} = "Serie";
-            #next;
         }
 
         # extract title
         if ( $_ =~ /fb-b15">(.*)<\/span.*/ ) {
             print "TITLE: $1\n" if ( defined $1 and ($verbose > 1) );
-            $programme{'title'} = "$1" if defined $1;
-            #next;
+            $programme{'title'} = filter_xml_content("$1");
         }
 
         # extract episode
         if ( $_ =~ /fn-b9">(.*)<\/span.*/ ) {
             print "FOLGE: $1\n" if ( defined $1 and ($verbose > 1) );
-            $programme{'episode'} = "$1" if defined $1;
-            #next;
+            $programme{'episode'} = filter_xml_content("$1");
         }
 
         # extraction of the description
         if ( $_ =~ /fn-b10">(.*)<\/span.*/ ) {
             print "DESC: $1\n" if ( defined $1 and ($verbose > 1) );
-            $programme{'desc'} = "$1" if defined $1;
-            #next;
+            $programme{'desc'} = filter_xml_content("$1");
         }
 
         # extraction of the date
         if ( $_ =~ /fn-w8".*>(.*),\s+(\d+.\d+.\d+)<\/t.*/ ) {
-            print "Date: $1, $2\n"
-              if ( defined $1 and defined $2 and ($verbose > 1) );
-            $programme{'dayoftheweek'} = "$1" if defined $1;
-            $programme{'date'}         = "$2" if defined $2;
-            #next;
+            print "Date: $1, $2\n" if ( defined $1 and defined $2 and ($verbose > 1) );
+            $programme{'dayoftheweek'} = filter_xml_content("$1");
+            $programme{'date'}         = filter_xml_content("$2");
         }
 
         # extraction of the begin end time
         if ( $_ =~ /fn-b8".*>Beginn:\s+(\d+:\d+).*<\/t.*/ ) {
             print "\tTime Start: $1\n" if ( defined $1 and ($verbose > 1) );
-            $programme{'start'} = "$1" if defined $1;
-            #next;
+            $programme{'start'} = filter_xml_content("$1");
         }
         if ( $_ =~ /fn-b8".*>Ende:\s+(\d+:\d+).*<\/t.*/ ) {
             print "\tTime End: $1\n" if ( defined $1 and ($verbose > 1) );
-            $programme{'stop'} = "$1" if defined $1;
-            #next;
+            $programme{'stop'} = filter_xml_content("$1");
         }
         if ( $_ =~ /fn-b8".*>Länge:\s+(\d+).*<\/t.*/ ) {
             print "\tcast Time: $1 min.\n" if ( defined $1 and ($verbose > 1) );
-            $programme{'timeduration'} = "$1" if defined $1;
-            #next;
+            $programme{'timeduration'} = filter_xml_content("$1");
         }
 
         # extract actors
@@ -553,7 +536,7 @@ sub parse_lines($$) {
         if ( $actors == 1 ) {
             if ( $_ =~ /.*fn-b8">(.*)<\/span.*/ ) {
                 print "Staring: $1\n" if ( defined $1 and ($verbose > 1) );
-                $programme{'actors'} = "$1" if defined $1;
+                $programme{'actors'} = filter_xml_content("$1");
             }
             $actors = 0;
             next;
@@ -568,9 +551,7 @@ sub parse_lines($$) {
             if ( $_ =~ /.*fn-b8">(.*)<\/span.*/ ) {
                 print "Regie: $1\n" if ( defined $1 and ($verbose > 1) );
 
-                $programme{'director'} = "$1" if defined $1;
-                $programme{'director'} =~ s/\<show_pers\.php3\?cle=\d+\>//g;
-                $programme{'director'} =~ s/\<\/show_pers\.php3\?cle=\d+\>//g;
+                $programme{'director'} = filter_xml_content("$1");
             }
             $producer = 0;
             next;
@@ -584,7 +565,7 @@ sub parse_lines($$) {
         if ( $author == 1 ) {
             if ( $_ =~ /.*fn-b8">(.*)<\/span.*/ ) {
                 print "Authors: $1\n" if ( defined $1 and ($verbose > 1) );
-                $programme{'writer'} .= "$1" if defined $1;
+                $programme{'writer'} .= filter_xml_content("$1");
             }
             $author = 0;
             next;
@@ -598,7 +579,7 @@ sub parse_lines($$) {
         if ( $category == 1 ) {
             if ( $_ =~ /.*fn-b8">(.*)<\/span.*/ ) {
                 print "Category: $1\n" if ( defined $1 and ($verbose > 1) );
-                $programme{'category'} = "$1" if defined $1;
+                $programme{'category'} = filter_xml_content("$1");
             }
             $category = 0;
             next;
@@ -612,7 +593,7 @@ sub parse_lines($$) {
         if ( $land == 1 ) {
             if ( $_ =~ /.*fn-b8">(.*)<.*/ ) {
                 print "Land: $1\n" if ( defined $1 and ($verbose > 1) );
-                $programme{'country'} = "$1" if defined $1;
+                $programme{'country'} = filter_xml_content("$1");
             }
             $land = 0;
             next;
@@ -625,9 +606,8 @@ sub parse_lines($$) {
         }
         if ( $kidprotection == 1 ) {
             if ( $_ =~ /.*fn-b8">(.*)<\/span.*/ ) {
-                print "Not Allowed for Kid under: $1\n"
-                  if ( defined $1 and ($verbose > 1) );
-                $programme{'rating'} = "$1" if defined $1;
+                print "Not Allowed for Kid under: $1\n" if ( defined $1 and ($verbose > 1) );
+                $programme{'rating'} = filter_xml_content("$1");
             }
             $kidprotection = 0;
             next;
@@ -641,7 +621,7 @@ sub parse_lines($$) {
         if ( $filmeditor == 1 ) {
             if ( $_ =~ /.*fn-b8">(.*)<\/span.*/ ) {
                 print "Film Editor: $1\n" if ( defined $1 and ($verbose > 1) );
-                $programme{'filmeditor'} = "$1" if defined $1;
+                $programme{'filmeditor'} = filter_xml_content("$1");
             }
             $filmeditor = 0;
             next;
@@ -655,7 +635,7 @@ sub parse_lines($$) {
         if ( $production == 1 ) {
             if ( $_ =~ /.*fn-b8">(.*)<\/span.*/ ) {
                 print "Studio Production: $1\n" if ( defined $1 and ($verbose > 1) );
-                $programme{'studio'} = "$1" if defined $1;
+                $programme{'studio'} = filter_xml_content("$1");
             }
             $production = 0;
             next;
@@ -669,7 +649,7 @@ sub parse_lines($$) {
         if ( $productor == 1 ) {
             if ( $_ =~ /.*fn-b8">(.*)<\/span.*/ ) {
                 print "Producer: $1\n" if ( defined $1 and ($verbose > 1) );
-                $programme{'producer'} = "$1" if defined $1;
+                $programme{'producer'} = filter_xml_content("$1");
             }
             $productor = 0;
             next;
@@ -683,7 +663,7 @@ sub parse_lines($$) {
         if ( $script == 1 ) {
             if ( $_ =~ /.*fn-b8">(.*)<\/span.*/ ) {
                 print "script: $1\n" if ( defined $1 and ($verbose > 1) );
-                $programme{'writer'} .= "$1" if defined $1;
+                $programme{'writer'} .= filter_xml_content("$1");
             }
             $script = 0;
             next;
@@ -697,7 +677,7 @@ sub parse_lines($$) {
         if ( $music == 1 ) {
             if ( $_ =~ /.*fn-b8">(.*)<\/span.*/ ) {
                 print "Music: $1\n" if ( defined $1 and ($verbose > 1) );
-                $programme{'musicauthor'} = "$1" if defined $1;
+                $programme{'musicauthor'} = filter_xml_content("$1");
             }
             $music = 0;
             next;
@@ -711,7 +691,7 @@ sub parse_lines($$) {
         if ( $camera == 1 ) {
             if ( $_ =~ /.*fn-b8">(.*)<\/span.*/ ) {
                 print "Camera: $1\n" if ( defined $1 and ($verbose > 1) );
-                $programme{'camera'} = "$1" if defined $1;
+                $programme{'camera'} = filter_xml_content("$1");
             }
             $camera = 0;
             next;
@@ -725,7 +705,7 @@ sub parse_lines($$) {
         if ( $originaltitle == 1 ) {
             if ( $_ =~ /.*fn-b8">(.*)<\/span.*/ ) {
                 print "Original Title: $1\n" if ( defined $1 and ($verbose > 1) );
-                $programme{'sub-title'} = "$1" if defined $1;
+                $programme{'sub-title'} = filter_xml_content("$1");
             }
             $originaltitle = 0;
             next;
@@ -739,7 +719,7 @@ sub parse_lines($$) {
         if ( $presentator == 1 ) {
             if ( $_ =~ /.*fn-b8">(.*)<\/span.*/ ) {
                 print "presented by: $1\n" if ( defined $1 and ($verbose > 1) );
-                $programme{'presenter'} = "$1" if defined $1;
+                $programme{'presenter'} = filter_xml_content("$1");
             }
             $presentator = 0;
             next;
@@ -753,7 +733,7 @@ sub parse_lines($$) {
         if ( $musicleader == 1 ) {
             if ( $_ =~ /.*fn-b8">(.*)<\/span.*/ ) {
                 print "Music chef: $1\n" if ( defined $1 and ($verbose > 1) );
-                $programme{'musicchef'} = "$1" if defined $1;
+                $programme{'musicchef'} = filter_xml_content("$1");
             }
             $musicleader = 0;
             next;
@@ -765,27 +745,22 @@ sub parse_lines($$) {
         if ( $_ =~ /Stereo/ ) {
             print "AUDIO=Stereo\n" if ($verbose > 1);
             $programme{'audio'} = "stereo";
-            #next;
         }
         if ( $_ =~ /16:9 video format/ ) {
             print "VIDEO=16:9 video format\n" if ($verbose > 1);
             $programme{'aspect'} = "16:9";
-            #next;
         }
         if ( $_ =~ /Mehrsprachig/ ) {
             print "Multilangue: Mehrsprachig\n" if ($verbose > 1);
             $programme{'languages'} = "multi";
-            #next;
         }
         if ( $_ =~ /High Definition Video/ ) {
             print "HDTV: High Definition Video\n" if ($verbose > 1);
             $programme{'quality'} = "HDTV";
-            #next;
         }
         if ( $_ =~ /Surround Sound/ ) {
             print "Audio: Surround Sound\n" if ($verbose > 1);
             $programme{'audiotype'} = "surround";
-            #next;
         }
     }
     $lineparsed += $i;
@@ -827,7 +802,7 @@ sub parse_channel($) {
 			next if (grep { ${$_}{'id'} == $channelid} @channellist);
             
             $chaninfo{'id'} = $1;
-            $chaninfo{'name'} = $channame if $channame;
+            $chaninfo{'name'} = filter_xml_content($channame);
             $chaninfo{'link'} = $chanlogolink;
 
 			# this{%chaninfo} will create a unique pointer reference on the %chaninfo hash.
@@ -881,17 +856,30 @@ sub write_channels() {
     close(WF);
 }
 
+# filter the content for insert in xml file
+#  returns undef if parameter is undef
+sub filter_xml_content($)
+{
+	my $line = shift;
+	
+	# look for undef
+	return undef if not defined $line;
+	
+	# cut tailing newline
+	chomp $line;
+	
+	# filter the content for unwanted chars
+	$line =~ s/\<.*\>//g;
+	$line =~ s/&/&amp;/g;
+	$line =~ s/c\<t/c't/g;
+	
+	return $line;
+}
+
 # xml_print($aline)
 # automatic \n at the end of the line
 sub xml_print($) {
     my $line = shift;
-
-    # removing unwanted html tags...
-    $line =~ s/\<br\/?\>//g;
-    $line =~ s/&/&amp;/g;
-
-    # temporary... because cablecom.tvtv.ch has a problem with c't magazin
-    $line =~ s/c\<t/c't/g;
 
     $output ? print XMLFILE "$line\n" : print "$line\n";
 }
@@ -915,8 +903,6 @@ sub xml_print_channel($) {
     my $channelname  = $chaninfo{'name'};
     my $chanlogolink = $chaninfo{'link'};
 
-    $channelname =~ s/&/&amp;/g;
-
     xml_print("\t\<channel id=\"${channelid}\"\>");
     xml_print("\t\t\<display-name lang=\"$language\"\>$channelname\<\/display-name\>");
     xml_print("\t\t\<icon src=\"${chanlogolink}\"\/\>");
@@ -939,18 +925,13 @@ sub xml_print_additional_materials($) {
     # non mandatory parameters... Bonus if it's existing
     # sub title, original title
     if ( defined $programme{'sub-title'} ) {
-        chomp( $subtitle = $programme{'sub-title'});
-        $subtitle =~ s/&/&amp;/g;
-        $subtitle =~ s/c\<t/c't/g;
+        $subtitle = $programme{'sub-title'};
         xml_print("\t\t\<sub-title lang=\"${language}\"\>${subtitle}\<\/sub-title\>");
     }
 
     # description
     if ( defined $programme{'desc'} ) {
-        chomp( $description = $programme{'desc'});
-        $description =~ s/&/&amp;/g;
-        $description =~ s/\<.*\>//g;
-        $description =~ s/c\<t/c't/g;
+        $description = $programme{'desc'};
         xml_print("\t\t\<desc lang=\"${language}\"\>${description}\t\t\<\/desc\>");
     }
 
@@ -1032,9 +1013,7 @@ sub xml_print_programme($) {
         $warning++;
     }
     if ( defined $programme{'title'} ) {
-        chomp($title = $programme{'title'});
-        $title =~ s/&/&amp;/g;
-        $title =~ s/c\<t/c't/g;
+        $title = $programme{'title'};
     }
     else {
         print STDERR "missing title\n";
