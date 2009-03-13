@@ -887,11 +887,11 @@ sub xml_print($) {
     my $line = shift;
 
     # removing unwanted html tags...
-    #$line =~ s/\<br\/?\>//g;
-    #$line =~ s/&/&amp;/g;
+    $line =~ s/\<br\/?\>//g;
+    $line =~ s/&/&amp;/g;
 
     # temporary... because cablecom.tvtv.ch has a problem with c't magazin
-    #$line =~ s/c\<t/c't/g;
+    $line =~ s/c\<t/c't/g;
 
     $output ? print XMLFILE "$line\n" : print "$line\n";
 }
