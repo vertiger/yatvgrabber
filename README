@@ -26,6 +26,7 @@ The grabber is written in "perl" and the following modules have to be installed:
 * Getopt::Long
 * LWP::UserAgent
 * File::Path
+* Sys::CPU
 
 The script also uses some external program:
 * wget

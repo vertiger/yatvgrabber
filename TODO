@@ -8,4 +8,6 @@ todo
 
 + optimise the --configure functionality, do not parse if the channel is not in the list
 + make a makefile | moulinette for testing the output xml...
-
++ add option to generate only an update file (file only downloaded programms)
++ parse the group numbers from the main page (no hardcoded groups) - remove the groups option
++ remove hardcoded max days limit (get max days from the main page)

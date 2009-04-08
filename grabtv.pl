@@ -7,17 +7,6 @@
 #You should have received a copy of the GNU General Public License along with this program; if not, see <http://www.gnu.org/licenses>.
 #Additional permission under GNU GPL version 3 section 7
 #
-#------------------------------------------------------------------------------#
-# TODO
-#------------------------------------------------------------------------------#
-# * use some user-agents more popular than wget :) DONE
-# * parse the results and create the xmltv format DONE
-# * use the -nc wget option like caching...  DONE
-# * maybe use the -N option for the timestamp version...
-#------------------------------------------------------------------------------#
-# User agents
-#------------------------------------------------------------------------------#
-#
 
 use strict;
 use threads;
@@ -38,13 +27,16 @@ my $testdir 	 = "$tmpdir/tests";
 my $configurefile = "$tmpdir/channel.grab";
 my $tmpcache     = "/var/cache/yatvgrabber";
 my $swap_file    = "$tmpcache/tempgrab";
+#------------------------------------------------------------------------------#
+# User agents
+#------------------------------------------------------------------------------#
 my @useragents   = (
 'Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10_5_5; fr-fr) AppleWebKit/525.18 (KHTML, like Gecko) Version/3.1.2 Safari/525.20.1',
 'Mozilla/5.0 (X11; U; Linux x86_64; en-US; rv:1.9.0.6) Gecko/2009020519 Ubuntu/9.04 (jaunty) Firefox/3.0.6',
 'Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.0; SLCC1; .NET CLR 2.0.50727; Media Center PC 5.0; .NET CLR 3.0.04506)'
 );
 my $rand_agent_number = int(rand(@useragents));
-my $language     = 'de';    # TODO support other languages
+my $language     = 'de';    # TODO support other languages / other tvtv-sites (tvtv.de, tvtv.fr, tvtv.co.uk))
 my $wget_timeout = "15";
 
 # using Tor!!!
@@ -75,6 +67,7 @@ my $no_cleanup;
 my $numberofthreads = Sys::CPU::cpu_count();
 my $configure;
 my $output;
+my $update_only;
 my $verbose = 0;
 my $help;
 
@@ -85,7 +78,6 @@ my $help;
 #
 #
 my $nbr_of_days   = 20;
-my $nbr_of_groups = 17;
 my $processlocal;
 my $maketestonerror; # this option will make a test of a file which could not properly be parsed
 
@@ -107,16 +99,19 @@ sub main() {
 
 	# main programm switch
 	if ($configure) {
-		
+		#
+		# configure option
+		#
 		# configure (only get the channel info with one day)
 		$nbr_of_days = 0;
-		$nbr_of_groups = 17;
 		
 	    get_groups();
 	    write_channels();
 	    
 	} else {
-		
+		#
+		# program parser option
+		#
 		# or program grabber
 		generate_valid_channels();
 		
@@ -175,7 +170,6 @@ Goodbye\n
 sub options() {
     GetOptions(
         "d|days=i"          => \$nbr_of_days,
-        "g|channel-group=i" => \$nbr_of_groups,
         "p|process-locally" => \$processlocal,
         "t|threads=i"       => \$numberofthreads,
         "c|configure"       => \$configure,
@@ -184,6 +178,7 @@ sub options() {
         "o|output-file=s"   => \$output,
         "e|enable-proxy"    => \$enableproxy,
         "nc|no-cleanup"		=> \$no_cleanup,
+        "uo|update-only"	=> \$update_only,
         "tope|make-test-on-parse-error"    => \$maketestonerror,
         "h|?|help"          => \$help
     ) || die "try -h or --help for more details...";
@@ -199,17 +194,19 @@ sub check_options() {
     $nbr_of_days = 20 if ($nbr_of_days > 20);
     $nbr_of_days = 0 if ($nbr_of_days < 0);
     
-    # limit the groups to get
-    $nbr_of_groups = 17 if ($nbr_of_groups > 17);
-    $nbr_of_groups = 0 if ($nbr_of_groups < 0);
-
     # configure channel valid list
     warn "WARNING: the $configurefile channel configuration file already exits\n" if ($configure and -e "$configurefile" );
 
     # return an error if the config file is missing
-    if ((not -e "$configurefile" ) && (not $configure)) {
+    if ((not -e "$configurefile" ) and (not $configure)) {
         warn "the $configurefile channel configuration file is missing, please call the --configure option first.\n";
         exit $retsyserr;
+    }
+    
+    # do not activate process local and update only at the same time
+    if (($update_only) and ($processlocal)) {
+    	warn "do not activate update-only and process-local at the same time - abort\n";
+    	exit $retsyserr;
     }
 }
 
@@ -231,11 +228,11 @@ d|days=x => grab tv data for x days counting from now! [0..20]
 c|configure => get the channel list, and save it to the $configurefile file. The user can remove as many channels he does not require. When calling the script, only the channel in this file will be grabbed.
 
 -- NoN Official parameters
-t|threads=i => define the number of threads are take to parse the html pages (default autoset) [0..]
-g|channel-group=i => gets the program for number of groups i E [0..16]
+t|threads=i => define the number of threads are take to parse the html pages (default autoset, 0 = parse in main thread) [0..]
 p|process-locally => only create the xmltv data without grabing any file (this work on the local files downloaded during a previous session)
 tope|make-test-on-parse-error => generate a test if a filename fails to be parsed properly [default off]
 nc|no-cleanup => do no cleanup after parsing [default off]
+uo|update-only => only generate an update file (only adds new downloaded programs) [default off]
 h|?|help => display this usage
 v|verbose=i => make it verbose, [default 0]
 
@@ -245,7 +242,7 @@ $0 --configure
 # you can print out a listing of the channels 
 $0 --channel-list
 # this will grab every tv program for every channels (-g option set to 16) and stores the results in test.xml
-$0 -d 6 -g 16 -o test.xml
+$0 -d 6 -g 17 -o test.xml
 
 AUTHORS:
 * keller_e 
@@ -263,12 +260,16 @@ sub get_groups() {
     my $url;
     my $file;
     my @lines = ();
-
+    
+    # get the group numbers from the main page - mind process-local
+    
+    
+	# get the group pages
     for (0 .. $nbr_of_days) {
     	$dayid = $_ % 7;
     	$weekid = int($_ / 7);
     	
-        for $groupid (0 .. $nbr_of_groups) {
+        for $groupid (0 .. 17) {
            	$url = "$commonurl/index.vm?dayId=${dayid}&weekId=${weekid}&groupid=${groupid}&lang=de&epgView=list";
             $file = "$tmpcache/group${groupid}-week${weekid}-day${dayid}.htm";
             print "URL:$url\n" if $verbose;
@@ -335,6 +336,12 @@ sub get_tv_program($) {
             if ($processlocal or -e $file) {
                 # check if the file is available
                 next if (not -e $file);
+                #   go to the next file, if the update-only flag is given
+                if ($update_only) {
+                	# update the access time --> for the clean up
+                	utime( time(), time(), $file);
+                	next;
+                }
                 	
                 print "$id.htm already exists... Skip Grabbing!\n" if ($verbose > 1);
             } else {
