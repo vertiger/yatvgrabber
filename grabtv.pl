@@ -85,7 +85,7 @@ my $help;
 #
 #
 my $nbr_of_days   = 20;
-my $nbr_of_groups = 16;
+my $nbr_of_groups = 17;
 my $processlocal;
 my $maketestonerror; # this option will make a test of a file which could not properly be parsed
 
@@ -110,7 +110,7 @@ sub main() {
 		
 		# configure (only get the channel info with one day)
 		$nbr_of_days = 0;
-		$nbr_of_groups = 16;
+		$nbr_of_groups = 17;
 		
 	    get_groups();
 	    write_channels();
@@ -200,14 +200,14 @@ sub check_options() {
     $nbr_of_days = 0 if ($nbr_of_days < 0);
     
     # limit the groups to get
-    $nbr_of_groups = 16 if ($nbr_of_groups > 16);
+    $nbr_of_groups = 17 if ($nbr_of_groups > 17);
     $nbr_of_groups = 0 if ($nbr_of_groups < 0);
 
     # configure channel valid list
     warn "WARNING: the $configurefile channel configuration file already exits\n" if ($configure and -e "$configurefile" );
 
     # return an error if the config file is missing
-    if (not -e "$configurefile" ) {
+    if ((not -e "$configurefile" ) && (not $configure)) {
         warn "the $configurefile channel configuration file is missing, please call the --configure option first.\n";
         exit $retsyserr;
     }
