@@ -55,11 +55,6 @@ $> perl ./grabtv.pl -h
 => display this usage
 
 
--- NoN Official (TBD)
--g|--channel-group=i => gets the program for number of groups i E [0..16]
--l|--channel-list => gives a list of every tv channel available
--p|--process-locally => only create the xmltv data without grabing any file (this work on the local files downloaded during a previous session)
-
 3. How it works
 
 TBD

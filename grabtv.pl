@@ -1055,7 +1055,7 @@ sub xml_print_programme($) {
     if ( $warning == 0 ) {
         xml_print("\t\<programme start=\"${date}${start}\" stop=\"${date}${end}\" channel=\"${channelid}\"\>");
         xml_print("\t\t\<title lang=\"${language}\"\>${title}\<\/title\>");
-        xml_print("\t\t\<date\>${date}\<\/date>");
+        #xml_print("\t\t\<date\>${date}\<\/date>"); #add the original air date
         foreach (split( ', ', $category)) {
             xml_print("\t\t\<category lang=\"${language}\"\>$_\<\/category\>");
         }
