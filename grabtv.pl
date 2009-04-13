@@ -269,42 +269,33 @@ sub get_groups() {
     $file = "$tmpcache/main.html";
     print "URL:$baseurl/main.html\n" if $verbose;
     
-    if ($processlocal)
-    {
+    if ($processlocal) {
     	# local processing
-    	if (-e $file)
-    	{
+    	if (-e $file) {
        		# read the file
        		@lines = read_from_file( $file);
        		
     		@groupid = ();
     		# parse the main file
-    		foreach (@lines)
-    		{
-    			if ($_ =~ /&groupid=(\d+)/ )
-    			{
+    		foreach (@lines) {
+    			if ($_ =~ /&groupid=(\d+)/ ) {
     				push @groupid, $1 if not grep { $_ == $1 } @groupid;
     			}
     		}
     	}
-    }
-    else
-    {
+    } else {
     	# normal grabbing
     	unlink $file if (-e $file);
     	
     	# get the main page
-	    if ($success == use_wget( $baseurl, $file))
-	    {
+	    if ($success == use_wget( $baseurl, $file)) {
        		# read the file
        		@lines = read_from_file( $file);
        		
 	    	@groupid = ();
     		# parse the main page
-    		foreach (@lines)
-    		{
-    			if ($_ =~ /&groupid=(\d+)/ )
-    			{
+    		foreach (@lines) {
+    			if ($_ =~ /&groupid=(\d+)/ ) {
     				push @groupid, $1 if not grep { $_ == $1 } @groupid;
     			}
     		}
@@ -321,8 +312,7 @@ sub get_groups() {
             $file = "$tmpcache/group${groupid}-week${weekid}-day${dayid}.htm";
             print "URL:$url\n" if $verbose;
             
-            if ($processlocal)
-            {
+            if ($processlocal) {
             	# only parse the local available files
             	if (-e $file) {
             		# read the file
@@ -341,8 +331,7 @@ sub get_groups() {
 	            unlink $file if (-e $file);                
             	
             	## get the group page from the web
-	            if ($success == use_wget( $url, $file))
-	            {
+	            if ($success == use_wget( $url, $file)) {
             		@lines = read_from_file( $file);
             		
 	              	# parse the channel info
@@ -403,29 +392,21 @@ sub get_tv_program($) {
     return if not (@localidlist > 0);
 
     # join the running threads list (from a previous run)
-    foreach (threads->list())
-    {
+    foreach (threads->list()) {
 	    $_->join();
     }
 
     #use slice
-    if ($numberofthreads < 1)
-    {
+    if ($numberofthreads < 1) {
     	# no threads just call the parser directly
     	thread_parser( @localidlist);
-    }
-    else
-    {
+    } else {
 	    my $localsize = (int (@localidlist / $numberofthreads) + 1);
-	    for (1 .. $numberofthreads)
-	    {
-	    	if ($localsize < @localidlist)
-	    	{
+	    for (1 .. $numberofthreads) {
+	    	if ($localsize < @localidlist) {
 	    		# will splice the elements
 		   		threads->create('thread_parser', splice @localidlist, 0, $localsize);
-	    	}
-	    	else
-	    	{
+	    	} else {
 		   		# will create a thread for the rest of the list
 	    		threads->create('thread_parser', @localidlist);
 	    	}	
@@ -441,10 +422,8 @@ sub thread_parser()
 {
     my @lines = ();
     
-    foreach (@_)
-    {
-    	if (defined $_)
-    	{
+    foreach (@_) {
+    	if (defined $_) {
 	    	print "$_\n" if ($verbose > 1);
 	    	
 	    	@lines = read_from_file($_);
@@ -1060,15 +1039,13 @@ sub xml_print_programme($) {
         $date = $programme{'date'};
         $date =~ m/(\d+).(\d+).(\d+)/;
         $date = "$3$2$1" if defined $1 and defined $2 and defined $3;
-    }
-    else {
+    } else {
         print STDERR "missing date\n";
         $warning++;
     }
     if ( defined $programme{'title'} ) {
         $title = $programme{'title'};
-    }
-    else {
+    } else {
         print STDERR "missing title\n";
         $warning++;
     }
@@ -1077,8 +1054,7 @@ sub xml_print_programme($) {
         $start = $programme{'start'};
         $start =~ s/://g;
         $start .= "00";
-    }
-    else {
+    } else {
         print STDERR "missing time start\n";
         $warning++;
     }
@@ -1090,8 +1066,7 @@ sub xml_print_programme($) {
 
     if ( defined $programme{'category'} ) {
         $category = $programme{'category'};
-    }
-    elsif ( defined $programme{'programmetype'} ) {
+    } elsif ( defined $programme{'programmetype'} ) {
         $programmetype = $programme{'programmetype'};
         if ( "Serie" eq "$programmetype" ) {
             $category = $programmetype;
@@ -1107,8 +1082,7 @@ sub xml_print_programme($) {
         }
         xml_print_additional_materials( \%programme );
         xml_print("\t\<\/programme\>");
-    }
-    else {
+    } else {
         warn("some mandatory keys are missing take a look to the following hash: warning nr: $warning\n");
         foreach ( keys(%programme) ) {
             print STDERR "key: $_ -> $programme{$_}\n";
@@ -1125,8 +1099,7 @@ sub xml_write() {
 	my $channelid;
 	
 	#join all threaded channel parsers
-    foreach (threads->list())
-    {
+    foreach (threads->list()) {
 	    $_->join();
     }
 	
