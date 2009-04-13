@@ -33,7 +33,10 @@ my $swap_file    = "$tmpcache/tempgrab";
 my @useragents   = (
 'Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10_5_5; fr-fr) AppleWebKit/525.18 (KHTML, like Gecko) Version/3.1.2 Safari/525.20.1',
 'Mozilla/5.0 (X11; U; Linux x86_64; en-US; rv:1.9.0.6) Gecko/2009020519 Ubuntu/9.04 (jaunty) Firefox/3.0.6',
-'Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.0; SLCC1; .NET CLR 2.0.50727; Media Center PC 5.0; .NET CLR 3.0.04506)'
+'Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.9.0.8) Gecko/2009033100 Ubuntu/9.04 (jaunty) Firefox/3.0.8',
+'Mozilla/5.0 (Windows; U; Windows NT 6.0; de; rv:1.9.0.8) Gecko/2009032609 Firefox/3.0.8 (.NET CLR 3.5.30729)',
+'Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.0; SLCC1; .NET CLR 2.0.50727; Media Center PC 5.0; .NET CLR 3.0.04506)',
+'Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.0; WOW64; SLCC1; .NET CLR 2.0.50727; Media Center PC 5.0; InfoPath.2; OfficeLiveConnector.1.3; OfficeLivePatch.0.0; .NET CLR 3.5.21022; .NET CLR 3.5.30729; .NET CLR 3.0.30618)'
 );
 my $rand_agent_number = int(rand(@useragents));
 my $language     = 'de';    # TODO support other languages / other tvtv-sites (tvtv.de, tvtv.fr, tvtv.co.uk))
@@ -262,7 +265,7 @@ sub get_groups() {
     my @lines = ();
     
     # get the group numbers from the main page - mind process-local
-    
+    # TODO: get group ids from the main page
     
 	# get the group pages
     for (0 .. $nbr_of_days) {
