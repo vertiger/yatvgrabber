@@ -905,6 +905,8 @@ sub filter_xml_content($)
 	$line =~ s/\>(.*)</$1/g;
 	$line =~ s/&/&amp;/g;
 	$line =~ s/c\<t/c't/g;
+	#remove all \spaces
+	$line =~ s/(\s+$)//g;
 	
 	return $line;
 }
