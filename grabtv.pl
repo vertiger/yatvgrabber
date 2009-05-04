@@ -902,7 +902,7 @@ sub filter_xml_content($)
 	
 	# filter the content for unwanted chars
 	$line =~ s/<.*>//g;
-	$line =~ s/\>(.*)</$1/g;
+	$line =~ s/>(.*)</$1/g;
 	$line =~ s/&/&amp;/g;
 	$line =~ s/c\<t/c't/g;
 	#remove all \spaces
