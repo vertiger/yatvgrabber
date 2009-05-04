@@ -901,7 +901,8 @@ sub filter_xml_content($)
 	chomp $line;
 	
 	# filter the content for unwanted chars
-	$line =~ s/\<.*\>//g;
+	$line =~ s/<.*>//g;
+	$line =~ s/\>(.*)</$1/g;
 	$line =~ s/&/&amp;/g;
 	$line =~ s/c\<t/c't/g;
 	
