@@ -502,8 +502,8 @@ sub parse_lines($$) {
     foreach (@lines) {
 
         # extarct the channel id
-        # hbx.pn="SF ZWEI (900)";//PAGE NAME(S)
-        if ( $_ =~ /hbx.pn=".*\((.*)\)".*/ ) {
+        # s.prop16="SF ZWEI (900)";//PAGE NAME(S)
+        if ( $_ =~ /s.prop16=".*\((.*)\)".*/ ) {
             print "CHANID: $1\n" if ( defined $1 and ($verbose > 1) );
             $programme{'channelid'} = "$1";
             
@@ -905,6 +905,8 @@ sub filter_xml_content($)
 	$line =~ s/>(.*)</$1/g;
 	$line =~ s/&/&amp;/g;
 	$line =~ s/c\<t/c't/g;
+	$line =~ s/<//g;
+	$line =~ s/>//g;
 	#remove all \spaces
 	$line =~ s/(\s+$)//g;
 	
