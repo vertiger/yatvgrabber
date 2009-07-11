@@ -16,7 +16,7 @@
 # Program parser regexp
 #
 
-[channelid]=s.prop16=".*\((.*)\)".*
+[channelid]=s.prop16="[a-zA-Z0-9 ]+\(([0-9]+)\)".*
 [programmetype]=(Film|Serie)
 [title]=fb-b15">(.*)<\/span.*
 [episode]=fn-b9">(.*)<\/span.*
