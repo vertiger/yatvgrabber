@@ -503,7 +503,7 @@ sub parse_lines($$) {
 
         # extarct the channel id
         # s.prop16="SF ZWEI (900)";//PAGE NAME(S)
-        if ( $_ =~ /s.prop16="[a-zA-Z0-9 ]+\(([0-9]+)\)".*/ ) {
+        if ( $_ =~ /s.prop16="[^\(]+\((\d+)\)".*/ ) {
             print "CHANID: $1\n" if ( defined $1 and ($verbose > 1) );
             $programme{'channelid'} = "$1";
             
