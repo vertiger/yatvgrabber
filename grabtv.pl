@@ -549,12 +549,13 @@ sub parse_lines($$) {
 
         # extract the channel id
         # s.prop16="SF ZWEI (900)";//PAGE NAME(S)
-        if ( $_ =~ /s.prop16="[^\(]+\((\d+)\)".*/ ) {
-            print "CHANID: $1\n" if ( $verbose > 1 );
+        if ( $_ =~ /s.prop16="[^\(]+\((.*)\)"/ ) {
             $programme{'channelid'} = "$1";
+            $programme{'channelid'} =~ s/,//g;
+            print "CHANID: $programme{'channelid'}\n" if ( $verbose > 1 );
 
             # next file if this is no valid channel
-            return if ( not grep { $_ == $1 } @validchannels );
+            return if ( not grep { $_ == $programme{'channelid'} } @validchannels );
         }
 
         # extract header information
