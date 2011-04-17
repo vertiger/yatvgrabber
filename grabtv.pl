@@ -594,7 +594,7 @@ sub parse_lines($$) {
         if ( $content > 0 ) {
 
             # get the title information
-            if ( $_ =~ /<h1.*>(.*)<\/h1/ ) {
+            if ( $_ =~ /<span.*>(.*)<\/span/ ) {
                 $programme{'title'} = filter_xml_content("$1");
                 print "TITLE: $programme{'title'}\n" if ( $verbose > 1 );
                 next;
