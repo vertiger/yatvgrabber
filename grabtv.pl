@@ -35,12 +35,11 @@ my $swap_file     = "$tmpcache/tempgrab";
 # User agents
 #------------------------------------------------------------------------------#
 my @useragents = (
-'Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10_5_5; fr-fr) AppleWebKit/525.18 (KHTML, like Gecko) Version/3.1.2 Safari/525.20.1',
-'Mozilla/5.0 (X11; Linux x86_64; rv:2.0) Gecko/20100101 Firefox/4.0',
-'Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.9.0.8) Gecko/2009033100 Ubuntu/9.04 (jaunty) Firefox/3.0.8',
-'Mozilla/5.0 (Windows; U; Windows NT 6.0; de; rv:1.9.0.8) Gecko/2009032609 Firefox/3.0.8 (.NET CLR 3.5.30729)',
-'Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.0; SLCC1; .NET CLR 2.0.50727; Media Center PC 5.0; .NET CLR 3.0.04506)',
-'Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.0; WOW64; SLCC1; .NET CLR 2.0.50727; Media Center PC 5.0; InfoPath.2; OfficeLiveConnector.1.3; OfficeLivePatch.0.0; .NET CLR 3.5.21022; .NET CLR 3.5.30729; .NET CLR 3.0.30618)'
+'Mozilla/5.0 (iPad; U; CPU OS 3_2 like Mac OS X; en-us) AppleWebKit/531.21.10 (KHTML, like Gecko) Version/4.0.4 Mobile/7B334b Safari/531.21.102011-10-16 20:23:50',
+'Mozilla/5.0 (Linux; U; Android 2.3.3; en-au; GT-I9100 Build/GINGERBREAD) AppleWebKit/533.1 (KHTML, like Gecko) Version/4.0 Mobile Safari/533.12011-10-16 20:22:55',
+'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_7_2) AppleWebKit/535.1 (KHTML, like Gecko) Chrome/14.0.835.202 Safari/535.12011-10-16 20:21:13',
+'Mozilla/5.0 (Ubuntu; X11; Linux x86_64; rv:8.0) Gecko/20100101 Firefox/8.0',
+'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:7.0.1) Gecko/20100101 Firefox/7.0.12011-10-16 20:23:00'
 );
 my $rand_agent_number  = int( rand(@useragents) );
 my $language           = 'de';
@@ -82,7 +81,7 @@ my $help;
 # per default it gets the tv program from max days and groups.
 # the number of days the grabber has to get
 #
-# As the cablecom site works with the followinf parameter in its address
+# As the cablecom site works with the following parameter in its address
 #
 #
 my $nbr_of_days = 20;
@@ -572,7 +571,8 @@ sub parse_lines($$) {
                 my $year_temp  = $current_year;
                 $day_temp   = $1 if defined $1;
                 $month_temp = $2 if defined $2;
-                $year_temp  = $3 if defined $3;
+                $year_temp++  if ($month_temp-1 < localtime->mon());
+                
                 $programme{'date'} = "$day_temp.$month_temp.$year_temp";
                 print "DATE: $programme{'date'}\n" if ( $verbose > 1 );
                 next;
