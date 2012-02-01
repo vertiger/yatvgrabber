@@ -571,7 +571,7 @@ sub parse_lines($$) {
                 my $year_temp  = $current_year;
                 $day_temp   = $1 if defined $1;
                 $month_temp = $2 if defined $2;
-                $year_temp++  if ($month_temp-1 < localtime->mon());
+                $year_temp++  if ($month_temp == 1) && (localtime->mon() == 11);
                 
                 $programme{'date'} = "$day_temp.$month_temp.$year_temp";
                 print "DATE: $programme{'date'}\n" if ( $verbose > 1 );
