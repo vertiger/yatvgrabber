@@ -1,64 +1,7 @@
-This file is a short usage for this tv grabber...
+Main project YaTvGrabber
 
-Table of contents
+- XMLTV grabber script
 
--1. History
-0. Prerequisite
-1. Launch the script
-2. Options
-3. How it works
-4. Issues
+subproject mythtv configurator
 
-
--1. History
------------
-As you can understand it, by the project name, this is one other implementation of a TV program grabber!
-This script is intented to be integrated to Mythtv (http://www.mythtv.org/) to feed the backend shueduler.
-
-The generated output, after grabbing the tv programs, has to embrace the xmltv DTD (http://wiki.xmltv.org)
-This project was born to grab the http://cablecom.tvtv.ch (German Version) website, but some adaptation should
-extend its action to other sites!
-
-0. Prerequisite
----------------
-The grabber is written in "perl" and the following modules have to be installed:
-* strict
-* Getopt::Long
-* LWP::UserAgent
-* File::Path
-* Sys::CPU
-
-The script also uses some external program:
-* wget
-
-Notes:
-the script was initially implemented with Perl v5.10.0 and wget v1.11.4
-
-1. Launch the script
---------------------
-When you are sure all the required Perl and Wget are installed, you can try:
-$> chmod 700 ./grabtv.pl
-$> ./grabtv.pl --help
-or 
-$> perl ./grabtv.pl -h
-
-2. Options
-----------
-
--o|--output-file aFileName
-=> define a output filename for the xml.
-
--d|--days nbrOfDaysToGrab
-=> grab tv data for x days counting from now! (x > 0)
-
--h|-?|--|help 
-=> display this usage
-
-
-3. How it works
-
-TBD
-
-4. Issues
-see on http://code.google.com/p/yatvgrabber
-
+- configure YaTvGrabber and MythTV 
