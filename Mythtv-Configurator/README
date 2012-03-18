@@ -1,0 +1,22 @@
+mythtv configurator
+
+helper for the yatvgrabber
+
+- enable DVB-EIT epg for our source
+
+features:
+- read and set the yatvgrabber channel configuration
+- read and set the mythtv channel configuration (includes useonairepg flag)
+- gui for the channel and id matching
+
+parameters (needed data):
+- yatvgrabber channel configuration file (default /etc/yatvgrabber/channel.grab)
+- mythtv db configuration (default: ${HOME_USER}/mythtv/mysql.txt)
+
+usage steps:
+1. mythtv is already configured and running (stop mythtv-backend service for configuration)
+2. configure grabtv.pl with: perl grabtv.pl --configure
+3. start configurator
+4. assign our channels the right xmltv id (tvtv ids)
+5. write the new channel config in the mythtv db
+6. write the assigned xmltv ids back into channel.grab (to clean unused tvtv ids)
