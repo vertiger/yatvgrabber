@@ -1,0 +1,11 @@
+TODO
+
+- downloading and install the channel icons
+
+Download and install the channel icon from the tvtv page. Example url: http://www.tvtv.ch/tvtv/resource?channelLogo=24
+Use this url: ${base_url}/tvtv/resource?channelLogo=${xmltvid}
+Save as ${xmltvid}.jpeg
+
+- make dialog resizable
+
+Make the main dialog resizeable.

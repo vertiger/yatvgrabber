@@ -1,13 +1,5 @@
 todo
 
-- make another directory .tvgrab/cache/* to store files................ DONE
-- use channel.id with id = \d.......................................... DONE
-- add icone to channel list.............................................DONE
-- defined --configure option............................................DONE
-- patch FSK to american rating..........................................DONE
-
-+ optimise the --configure functionality, do not parse if the channel is not in the list
-+ make a makefile | moulinette for testing the output xml...
-+ add option to generate only an update file (file only downloaded programms)
-+ parse the group numbers from the main page (no hardcoded groups) - remove the groups option
-+ remove hardcoded max days limit (get max days from the main page)
+python rewrite of the grabber script
+- use the tvtv main pages (multiple pages have to be supported, only download programs from the main base page)
+- additional base pages are for channel id grabbing (cofnigure)
