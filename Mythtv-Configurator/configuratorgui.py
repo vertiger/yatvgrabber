@@ -2,7 +2,7 @@
 
 # Form implementation generated from reading ui file 'configuratorgui.ui'
 #
-# Created: Sun Mar 18 15:10:03 2012
+# Created: Mon Mar 19 21:44:25 2012
 #      by: PyQt4 UI code generator 4.8.5
 #
 # WARNING! All changes made in this file will be lost!
@@ -37,7 +37,7 @@ class Ui_Dialog(object):
         self.listViewYatvgrabberConfig.setEditTriggers(QtGui.QAbstractItemView.NoEditTriggers)
         self.listViewYatvgrabberConfig.setObjectName(_fromUtf8("listViewYatvgrabberConfig"))
         self.writeMythtvConfigButton = QtGui.QPushButton(Dialog)
-        self.writeMythtvConfigButton.setGeometry(QtCore.QRect(10, 10, 191, 101))
+        self.writeMythtvConfigButton.setGeometry(QtCore.QRect(10, 190, 191, 101))
         sizePolicy = QtGui.QSizePolicy(QtGui.QSizePolicy.Fixed, QtGui.QSizePolicy.Fixed)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
@@ -74,7 +74,7 @@ class Ui_Dialog(object):
         self.labelYatvgrabberConfig.setText(QtGui.QApplication.translate("Dialog", "YaTvGrabber Channel Configuration", None, QtGui.QApplication.UnicodeUTF8))
         self.labelYatvgrabberConfig.setObjectName(_fromUtf8("labelYatvgrabberConfig"))
         self.clearMythtvXmlTvIdButton = QtGui.QPushButton(Dialog)
-        self.clearMythtvXmlTvIdButton.setGeometry(QtCore.QRect(10, 150, 191, 111))
+        self.clearMythtvXmlTvIdButton.setGeometry(QtCore.QRect(10, 10, 191, 111))
         sizePolicy = QtGui.QSizePolicy(QtGui.QSizePolicy.Fixed, QtGui.QSizePolicy.Fixed)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
@@ -84,6 +84,12 @@ class Ui_Dialog(object):
 "from selected\n"
 "MythTV channel", None, QtGui.QApplication.UnicodeUTF8))
         self.clearMythtvXmlTvIdButton.setObjectName(_fromUtf8("clearMythtvXmlTvIdButton"))
+        self.radioButtonWithoutXmlId = QtGui.QRadioButton(Dialog)
+        self.radioButtonWithoutXmlId.setGeometry(QtCore.QRect(10, 140, 181, 31))
+        self.radioButtonWithoutXmlId.setText(QtGui.QApplication.translate("Dialog", "Show only Channels\n"
+"without XMLTV id", None, QtGui.QApplication.UnicodeUTF8))
+        self.radioButtonWithoutXmlId.setChecked(False)
+        self.radioButtonWithoutXmlId.setObjectName(_fromUtf8("radioButtonWithoutXmlId"))
 
         self.retranslateUi(Dialog)
         QtCore.QMetaObject.connectSlotsByName(Dialog)

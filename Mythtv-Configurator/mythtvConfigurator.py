@@ -6,8 +6,7 @@ import sys
 import shutil
 import _mysql
 from configobj import ConfigObj
-#from PyQt4.QtCore import QModelIndex
-from PyQt4.QtGui import QDialog, QApplication, QStandardItem, QStandardItemModel, QItemSelectionModel
+from PyQt4.QtGui import QDialog, QApplication, QStandardItem, QStandardItemModel, QItemSelectionModel, QMessageBox
 from configuratorgui import Ui_Dialog
 from operator import itemgetter
 
@@ -31,7 +30,7 @@ class MainDialog(QDialog):
                             help='mythtv database configuration file')
         arguments = parser.parse_args()
         self.yatvgrabberConfigFile = arguments.channelconf
-        self.mythtvDbConfig = ConfigObj(arguments.mythtvdbconf)
+        self.mythtvDbConfig = ConfigObj(arguments.mythtvdbconf, raise_errors=True)
         
         # load the data from the mythtv database
         db = _mysql.connect(host=self.mythtvDbConfig["DBHostName"],
@@ -79,6 +78,7 @@ class MainDialog(QDialog):
         self.ui.listViewMythtvConfig.clicked.connect(self.ClickedChannelListView)
         self.ui.listViewYatvgrabberConfig.clicked.connect(self.ClickedIdListView)
         self.ui.clearMythtvXmlTvIdButton.clicked.connect(self.ClearSelectedXmlTvId)
+        self.ui.radioButtonWithoutXmlId.toggled.connect(self.ToggledWithoutXmlIdRadioButton)
     
     def ClickedExportToMySQL(self):
         db = _mysql.connect(host=self.mythtvDbConfig["DBHostName"],
@@ -90,6 +90,7 @@ class MainDialog(QDialog):
             useairguideFlag = 0 if row['xmltvid'] != "" else 1 # automatic unset / set the useonairguide flag (no xmltvid --> use dvb eit epg)
             db.query('UPDATE channel SET xmltvid=\''+row['xmltvid']+'\', useonairguide='+str(useairguideFlag)+' WHERE chanid='+row['chanid'])
         db.close()
+        QMessageBox.information(self, 'Info', 'The channel configuration has been written to the MythTV database.\n' + self.mythtvDbConfig["DBName"] +'@'+ self.mythtvDbConfig["DBHostName"])
     
     def ClickedExportToChannelConf(self):
         shutil.copy(self.yatvgrabberConfigFile, self.yatvgrabberConfigFile + '.bak')
@@ -99,6 +100,7 @@ class MainDialog(QDialog):
             if row['xmltvid'] != "":
                 chanfile.write(row['xmltvid'] +"#"+ row['name'] +"\n")
         chanfile.close()
+        QMessageBox.information(self, 'Info', 'The configuration has been exported to the YaTvGrabber channel file.\n' + self.yatvgrabberConfigFile)
     
     def UpdatedChannelSearchField(self, text_str):
         for (counter, item) in enumerate(self.mythtvConfig):
@@ -125,6 +127,9 @@ class MainDialog(QDialog):
                 confSelection.select( item['qitem'].index(), item['qitem'].index())
                 self.ui.listViewYatvgrabberConfig.scrollTo(item['qitem'].index())
         self.ui.listViewYatvgrabberConfig.selectionModel().select(confSelection, QItemSelectionModel.ClearAndSelect)
+        # update the id search line to show current selected channel name
+        self.ui.lineSearchYatvgrabberConfig.setText(self.mythtvConfig[selectedMythConfIndex]['name'])
+        self.UpdateIdSearchField(self.mythtvConfig[selectedMythConfIndex]['name'])
     
     def ClickedIdListView(self):
         selectedChannelConfIndex = self.ui.listViewYatvgrabberConfig.currentIndex().row()
@@ -132,6 +137,8 @@ class MainDialog(QDialog):
         temp = self.mythtvConfig[selectedMythConfIndex]
         temp['xmltvid'] = self.channelConfig[selectedChannelConfIndex]['id']
         temp['qitem'].setText(temp['name'] +' ('+ temp['xmltvid'] +')')
+        # update the without xml id selection
+        self.ToggledWithoutXmlIdRadioButton(self.ui.radioButtonWithoutXmlId.isChecked())
     
     def ClearSelectedXmlTvId(self):
         temp = self.mythtvConfig[self.ui.listViewMythtvConfig.currentIndex().row()]
@@ -140,6 +147,12 @@ class MainDialog(QDialog):
         confSelection = self.ui.listViewYatvgrabberConfig.selectionModel().selection()
         confSelection.clear()
         self.ui.listViewYatvgrabberConfig.selectionModel().select(confSelection, QItemSelectionModel.Clear)
+        # update the without xml id selection
+        self.ToggledWithoutXmlIdRadioButton(self.ui.radioButtonWithoutXmlId.isChecked())
+    
+    def ToggledWithoutXmlIdRadioButton(self, state):
+        for (counter, item) in enumerate(self.mythtvConfig):
+            self.ui.listViewMythtvConfig.setRowHidden(counter,(state and item['xmltvid'] != ""))
 
 # open the gui
 if __name__ == "__main__":
