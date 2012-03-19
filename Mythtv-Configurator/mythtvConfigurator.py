@@ -104,17 +104,11 @@ class MainDialog(QDialog):
     
     def UpdatedChannelSearchField(self, text_str):
         for (counter, item) in enumerate(self.mythtvConfig):
-            if item['name'].lower().find(str(text_str).lower()) == -1:
-                self.ui.listViewMythtvConfig.setRowHidden(counter,True)
-            else:
-                self.ui.listViewMythtvConfig.setRowHidden(counter,False)
+            self.ui.listViewMythtvConfig.setRowHidden(counter,(item['name'].lower().find(str(text_str).lower()) == -1))
     
     def UpdateIdSearchField(self, text_str):
         for (counter, item) in enumerate(self.channelConfig):
-            if item['name'].lower().find(str(text_str).lower()) == -1:
-                self.ui.listViewYatvgrabberConfig.setRowHidden(counter,True)
-            else:
-                self.ui.listViewYatvgrabberConfig.setRowHidden(counter,False)
+            self.ui.listViewYatvgrabberConfig.setRowHidden(counter,(item['name'].lower().find(str(text_str).lower()) == -1))
     
     def ClickedChannelListView(self):
         selectedMythConfIndex = self.ui.listViewMythtvConfig.currentIndex().row()
