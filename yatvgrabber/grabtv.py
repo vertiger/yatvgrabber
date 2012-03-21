@@ -41,9 +41,13 @@ def main():
     # fill the channel list
     for line in open(ArgumentParser.args.channelfile, "r"):
         temp = line.split('#')
-        DataStorage.channelList[temp[0]] = temp[1]
+        try:
+            DataStorage.channelList[temp[0]] = temp[1]
+        except:
+            print sys.stderr, "error reading channel configuration, line: " + line
+    
     # get the program data
-    # looping for the days
+    # looping for the days (range: start number, numbers count)
     for dayIndex in range(0, ArgumentParser.args.days+1):
         parseChannelData(grabConf['page'][0], dayIndex//7, dayIndex%7)
     
@@ -54,6 +58,10 @@ def main():
     
     # post grab cleanup
     postGrabCleanUp()
+
+class DataStorage():
+    channelList = dict()
+    programData = dict()
 
 class ArgumentParser():
     @staticmethod
@@ -114,10 +122,6 @@ def postGrabCleanUp():
     # cleanup the grabbed files - files which are not used anymore
     subprocess.call('find '+ ArgumentParser.args.cachedir +' -type f -atime +1 -exec rm -f \'{}\' +', shell=True)
 
-class DataStorage():
-    channelList = dict()
-    programData = dict()
-
 class AppOpener(urllib.FancyURLopener):
     user_agents = ['Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Win64; x64; Trident/5.0)',
                    'Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.0; SLCC1; .NET CLR 2.0.50727; Media Center PC 5.0; .NET CLR 3.0.04506)',
@@ -131,7 +135,11 @@ class Parser():
         filename = ArgumentParser.args.cachedir +"/"+ (base_url.split('/')[-1]).strip() + ".html"
         if not ArgumentParser.args.local:
             # always retrieve the overview page in none local mode
-            urllib.urlretrieve(base_url, filename)
+            try:
+                urllib.urlretrieve(base_url, filename)
+            except:
+                print sys.stderr, "unable to retrieve file " +filename
+                return str()
         if  not os.path.isfile(filename):
             print sys.stderr, "unable to find file " +filename
             return str()
@@ -142,7 +150,11 @@ class Parser():
         filename = ArgumentParser.args.cachedir +"/"+ (base_url.split('/')[-1]).strip() + ".additional.html"
         if not ArgumentParser.args.local:
             # always retrieve the additional page in none local mode
-            urllib.urlretrieve(base_url + "/tvtv/index.vm?mainTemplate=web%2FadditionalChannelsSelection.vm", filename)
+            try:
+                urllib.urlretrieve(base_url + "/tvtv/index.vm?mainTemplate=web%2FadditionalChannelsSelection.vm", filename)
+            except:
+                print sys.stderr, "unable to retrieve file " +filename
+                return str()
         if  not os.path.isfile(filename):
             print sys.stderr, "unable to find file " +filename
             return str()
@@ -150,12 +162,20 @@ class Parser():
     
     @staticmethod
     def getDayPage(base_url, week, day, channelId):
-        filename = ArgumentParser.args.cachedir +"/week="+str(week)+"-day="+str(day)+"-channel="+str(channelId)+".html"
-        if not ArgumentParser.args.local:
+        if (day > -1):
             # always retrieve the day page in none local mode
-            urllib.urlretrieve(base_url + "/tvtv/index.vm?weekId="+str(week)+"&dayId="+str(day)+"&chnl="+str(channelId), filename)
+            filename = ArgumentParser.args.cachedir +"/week="+str(week)+"-day="+str(day)+"-channel="+str(channelId)+".html"
+            grabUrl = base_url + "/tvtv/index.vm?weekId="+str(week)+"&dayId="+str(day)+"&chnl="+str(channelId)
+        else:
             # use channelWeek to get the hole week for one channel
-            #urllib.urlretrieve(base_url + "/tvtv/index.vm?weekId="+str(week)+"&dayId="+str(day)+"&channelWeek="+str(channelId), filename)
+            filename = ArgumentParser.args.cachedir +"/week="+str(week)+"-channel="+str(channelId)+".html"
+            grabUrl = base_url + "/tvtv/index.vm?weekId="+str(week)+"&dayId=0&channelWeek="+str(channelId)
+        if not ArgumentParser.args.local:
+            try:
+                urllib.urlretrieve(grabUrl, filename)
+            except:
+                print sys.stderr, "unable to retrieve file " +filename
+                return str()
         if  not os.path.isfile(filename):
             print sys.stderr, "unable to find file " +filename
             return str()
@@ -167,7 +187,11 @@ class Parser():
         filename = ArgumentParser.args.cachedir +"/"+str(programId)+ ".html"
         # always cached the program page if available
         if not ArgumentParser.args.local and not os.path.isfile(filename):
-            urllib.urlretrieve(base_url + "/tvtv/web/programdetails.vm?programmeId="+str(programId), filename)
+            try:
+                urllib.urlretrieve(base_url + "/tvtv/web/programdetails.vm?programmeId="+str(programId), filename)
+            except:
+                print sys.stderr, "unable to retrieve file " +filename
+                return str()
         if  not os.path.isfile(filename):
             print sys.stderr, "unable to find file " +filename
             return str()
@@ -194,6 +218,12 @@ def parseChannelData(pagename, week, day):
     regExProgramId = re.compile(r'programmeId=([0-9]+)')
     regExChannelId = re.compile(r's.prop16="[^\(]+\(([0-9]+)\)"')
     regExTitle = re.compile(r's.prop5="(.*)\[[0-9]+\]"')
+    regExSubtitle = re.compile(r'<span class="fb-b9">(.*?)</span>')
+    regExEpisode = re.compile(r'<span class="fn-b9">(.*?)</span>')
+    regExDescription = re.compile(r'<span class="fn-b10">(.*?)</span>')
+    regExDate = re.compile(r'>[^<]+([0-9]{2}\.[0-9]{2}\.[0-9]{4})<')
+    regExStart = re.compile(r'>Beginn: ([0-9]{2}:[0-9]{2}) Uhr<')
+    regExFinish = re.compile(r'>Ende: ([0-9]{2}:[0-9]{2}) Uhr<')
     for channelId in DataStorage.channelList.keys():
         for dayLine in Parser.getDayPage(pagename, week, day, channelId).split('\n'):
             for programId in regExProgramId.findall(dayLine):
@@ -203,19 +233,61 @@ def parseChannelData(pagename, week, day):
                 programPage = Parser.getProgramPage(pagename, programId)
                 
                 # get the channel id from the page
-                for foundChanId in regExChannelId.findall(programPage):
-                    DataStorage.programData[programId]['channelid'] = foundChanId
+                for foundStr in regExChannelId.findall(programPage):
+                    tempStr = FilterStringForTags(foundStr)
+                    if tempStr != "":
+                        DataStorage.programData[programId]['channelid'] = tempStr
                 # get the title from the page
-                for foundTitle in regExTitle.findall(programPage):
-                    DataStorage.programData[programId]['title'] = foundTitle.strip()
+                for foundStr in regExTitle.findall(programPage):
+                    tempStr = FilterStringForTags(foundStr)
+                    if tempStr != "":
+                        DataStorage.programData[programId]['title'] = tempStr
                 
                 #cut down the content
-                programPage = programPage.split(r'class="program-content"')[1]
-                programPage = programPage.split(r'class="list_detail"')[0]
+                try:
+                    programPage = programPage.split(r'class="program-content"')[1]
+                    programPage = programPage.split(r'class="list_detail"')[0]
+                except:
+                    print sys.stderr, "parsing exception in {0} (week {1}, day {2})".format(programId, week, day)
+                
+                # sub-title
+                for foundStr in regExSubtitle.findall(programPage):
+                    DataStorage.programData[programId]['sub-title'] = FilterStringForTags(foundStr)
+                # episode
+                episodeString = ""
+                for foundStr in regExEpisode.findall(programPage):
+                    episodeString = episodeString +' '+ foundStr.strip()
+                episodeString = episodeString.strip()
+                if episodeString != "":
+                    DataStorage.programData[programId]['episode'] = FilterStringForTags(episodeString)
+                
+                # description
+                for foundStr in regExDescription.findall(programPage):
+                    DataStorage.programData[programId]['description'] = FilterStringForTags(foundStr)
+                
+                # date
+                for foundStr in regExDate.findall(programPage):
+                    DataStorage.programData[programId]['date'] = foundStr.strip()
+                # start date
+                for foundStr in regExStart.findall(programPage):
+                    DataStorage.programData[programId]['start'] = foundStr.strip()
+                # finish date
+                for foundStr in regExFinish.findall(programPage):
+                    DataStorage.programData[programId]['finish'] = foundStr.strip()
                 
                 # parse the page content
-                for programLine in programPage.split('\n'):
-                    pass
+                #for programLine in programPage.split('\n'):
+                #    pass
+
+def FilterStringForTags(inputStr):
+    
+    retStr = re.sub(r'<[^>]*>', ' ', inputStr)
+    retStr = re.sub(r'&/&amp;', ' ', retStr)
+    retStr = re.sub(r'c\<t/c\'t', ' ', retStr)
+    #retStr = re.sub(r'[^>]>', ' ', retStr)
+    #retStr = re.sub(r'<[^<]', ' ', retStr)
+    
+    return retStr.strip()
 
 # open the gui
 if __name__ == "__main__":
