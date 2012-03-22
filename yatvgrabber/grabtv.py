@@ -48,8 +48,12 @@ def main():
     
     # get the program data
     # looping for the days (range: start number, numbers count)
-    for dayIndex in range(0, ArgumentParser.args.days+1):
-        parseChannelData(grabConf['page'][0], dayIndex//7, dayIndex%7)
+    if ArgumentParser.args.weeks > 0:
+        for weekno in range(0, ArgumentParser.args.weeks):
+            parseChannelData(grabConf['page'][0], weekno, -1)
+    else:
+        for dayIndex in range(0, ArgumentParser.args.days+1):
+            parseChannelData(grabConf['page'][0], dayIndex//7, dayIndex%7)
     
     # export the program data to xmltv file
     # debug output is here
@@ -69,7 +73,9 @@ class ArgumentParser():
         parser = argparse.ArgumentParser(description="YaTvGrabber, XMLTV grabbing script",
                                  epilog="Copyright (C) [2012] [keller.eric, lars.schmohl]",
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-        parser.add_argument('--days', type=int, choices=range(0, 21), default=20,
+        parser.add_argument('--weeks', type=int, choices=range(0, 4), default=3,
+                            help='weeks to grab (0 enables option days)')
+        parser.add_argument('--days', type=int, choices=range(0, 21), default=0,
                             help='days to grab')
         parser.add_argument('--outputfile', type=str, default="tvtv.xml",
                             help='output file with the xmltv data')
