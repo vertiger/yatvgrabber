@@ -48,12 +48,14 @@ def main():
     
     # get the program data
     # looping for the days (range: start number, numbers count)
+    lastWeek = 0
     if ArgumentParser.args.weeks > 0:
         for weekno in range(0, ArgumentParser.args.weeks):
             parseChannelData(grabConf['page'][0], weekno, -1)
-    else:
-        for dayIndex in range(0, ArgumentParser.args.days+1):
-            parseChannelData(grabConf['page'][0], dayIndex//7, dayIndex%7)
+            lastWeek = weekno + 1
+    if ArgumentParser.args.days > 0:
+        for dayno in range(0, ArgumentParser.args.days):
+            parseChannelData(grabConf['page'][0], lastWeek, dayno)
     
     # export the program data to xmltv file
     # debug output is here
@@ -73,9 +75,7 @@ class ArgumentParser():
         parser = argparse.ArgumentParser(description="YaTvGrabber, XMLTV grabbing script",
                                  epilog="Copyright (C) [2012] [keller.eric, lars.schmohl]",
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-        parser.add_argument('--weeks', type=int, choices=range(0, 4), default=3,
-                            help='weeks to grab (0 enables option days)')
-        parser.add_argument('--days', type=int, choices=range(0, 21), default=0,
+        parser.add_argument('--days', type=int, choices=range(1, 21), default=21,
                             help='days to grab')
         parser.add_argument('--outputfile', type=str, default="tvtv.xml",
                             help='output file with the xmltv data')
@@ -89,8 +89,6 @@ class ArgumentParser():
                             help='cache directory for the grabber')
         parser.add_argument('--local', action="store_true", default=False,
                             help='process only the local stored cache files')
-        #parser.add_argument('--verbose', type=int, default=0,
-        #                    help='make it verbose')
         
         ## parse the arguments
         ArgumentParser.args = parser.parse_args()
@@ -98,10 +96,9 @@ class ArgumentParser():
         ArgumentParser.args.configfile = os.path.realpath(ArgumentParser.args.configfile)
         ArgumentParser.args.channelfile = os.path.realpath(ArgumentParser.args.channelfile)
         ArgumentParser.args.cachedir = os.path.realpath(ArgumentParser.args.cachedir)
+        ArgumentParser.args.weeks = ArgumentParser.args.days // 7
+        ArgumentParser.args.days = ArgumentParser.args.days % 7
         
-        # verbose - print the arguments
-        # somebody make an good advise for logging
-        #logging.disable(logging.CRITICAL + 1 - (ArgumentParser.args.verbose * 10))
 
 def preGrabCleanUp():
     # create the config dir if needed
