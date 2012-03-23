@@ -202,19 +202,25 @@ class Parser():
         return open(filename, 'r').read()
 
 def parseChannelList(pagename):
-    channellist = dict()
-    # parse the main page
+    """parse the overview and additional pages for channel ids"""
+    
     regExChannelId = re.compile(r'weekChannel=([0-9]+)')
     regExChannelName = re.compile(r'class="">(.*)<')
+    
+    channellist = dict()
+    
+    # parse the main page
     for line in Parser.getOverviewPage(pagename).split('\n'):
         for foundId in regExChannelId.findall(line):
             for foundName in regExChannelName.findall(line):
                 channellist[foundId] = foundName + " (" + pagename + ")"
+    
     # additional page page
     regExChannelId = re.compile(r'channelLogo=([0-9]+)"')
     for line in Parser.getAdditionalPage(pagename).split('\n'):
         for foundId in regExChannelId.findall(line):
             channellist[foundId] = (line.split('>')[-1]).strip() +" ("+ pagename +")"
+    
     return channellist
 
 def parseChannelData(pagename, week, day):
@@ -284,9 +290,10 @@ def parseChannelData(pagename, week, day):
 
 def FilterStringForTags(inputStr):
     
-    retStr = re.sub(r'<[^>]*>', ' ', inputStr)
-    retStr = re.sub(r'&/&amp;', ' ', retStr)
-    retStr = re.sub(r'c\<t/c\'t', ' ', retStr)
+    retStr = re.sub(r'<[^>]*>', ' ', inputStr)  #remove all html tags
+    retStr = re.sub(r'&', '&amp;', retStr)      #use the html & (and)
+    retStr = re.sub(r'c\<t', 'c\'t', retStr)    #set the right c't
+    retStr = re.sub(r',$', '', retStr)          #remove tailing comma
     #retStr = re.sub(r'[^>]>', ' ', retStr)
     #retStr = re.sub(r'<[^<]', ' ', retStr)
     
