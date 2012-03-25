@@ -89,7 +89,7 @@ class ArgumentParser():
         parser = argparse.ArgumentParser(description="YaTvGrabber, XMLTV grabbing script",
                                  epilog="Copyright (C) [2012] [keller.eric, lars.schmohl]",
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-        parser.add_argument('--days', type=int, choices=range(1, 21), default=21,
+        parser.add_argument('--days', type=int, choices=range(1, 22), default=21,
                             help='days to grab')
         parser.add_argument('--outputfile', type=str, default="tvtv.xml",
                             help='output file with the xmltv data')
