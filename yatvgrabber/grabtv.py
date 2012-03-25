@@ -56,7 +56,7 @@ def main():
             continue
         try:
             (chanid, name) = line.split('#')
-            DataStorage.channelList[chanid] = name.strip()
+            DataStorage.channelList[chanid] = unicode(name.strip().decode("latin1"))
         except:
             print sys.stderr, "error reading channel configuration, line: " + line
     
@@ -380,7 +380,7 @@ def WriteXmlTvFile(base_url):
         try:
             channel = etree.SubElement(root, "channel", id=channelid)
             name = etree.SubElement(channel, "display-name")
-            name.text = DataStorage.channelList[channelid]
+            name.text = unicode(DataStorage.channelList[channelid])
         except:
             print sys.stderr, "error create xmltv tags for channelid " + channelid
     
@@ -426,7 +426,7 @@ def WriteXmlTvFile(base_url):
                         subtitle.text = unicode(pdata["orgtitle"])
             
             # create the description subtag
-            if pdata.has_key("description"):
+            if pdata.has_key("description") and pdata["description"] != "":
                 desc = etree.SubElement(program, "desc")
                 desc.text = unicode(pdata["description"])
             
@@ -440,11 +440,14 @@ def WriteXmlTvFile(base_url):
             # actor
             if pdata.has_key("actors") and pdata["actors"] != "":
                 for foundStr in pdata["actors"].split(','):
-                    (fActor, fRole) = foundStr.strip().split('(')
                     actor = etree.SubElement(creditstag, "actor")
-                    actor.text = unicode(fActor.strip())
-                    if (fRole != None):
-                        actor.set("role", unicode(fRole.rstrip(') ')))
+                    if foundStr.find('(') == -1:
+                        actor.text = unicode(foundStr.strip())
+                    else:
+                        (fActor, fRole) = foundStr.strip().split('(')
+                        actor.text = unicode(fActor.strip())
+                        if (fRole != None):
+                            actor.set("role", unicode(fRole.rstrip(') ')))
             # writer
             if pdata.has_key("author") and pdata["author"] != "":
                 for foundStr in pdata["author"].split(','):
@@ -500,6 +503,7 @@ def WriteXmlTvFile(base_url):
     #for program in DataStorage.programData.keys():
     #    outfile.write( str(program)+': '+str(DataStorage.programData[program])+'\n')
     outfile.close()
+    print sys.stdout, "xmltv file successfully written, file: " +ArgumentParser.args.outputfile
 
 # open the gui
 if __name__ == "__main__":
