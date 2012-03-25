@@ -31,7 +31,7 @@ def main():
         try:
             grabConf.write()
         except:
-            print sys.stderr, "unable the write config file: " +ArgumentParser.args.configfile
+            print "unable the write config file: " +ArgumentParser.args.configfile
             sys.exit(-1)
     
     # execute the configure mode
@@ -44,9 +44,9 @@ def main():
                 channelfile.write(str(channelid) +'#'+ DataStorage.channelList[channelid] +'\n')
             channelfile.close()
         except:
-            print sys.stderr, "error the writing channel file: " +ArgumentParser.args.channelfile
+            print "error the writing channel file: " +ArgumentParser.args.channelfile
             sys.exit(-1)
-        print sys.stdout, "channel file successfully written, file: " +ArgumentParser.args.channelfile
+        print "channel file successfully written, file: " +ArgumentParser.args.channelfile
         sys.exit(0)
     
     # normal grabbing workflow
@@ -56,9 +56,9 @@ def main():
             continue
         try:
             (chanid, name) = line.split('#')
-            DataStorage.channelList[chanid] = unicode(name.strip().decode("latin1"))
+            DataStorage.channelList[chanid] = name.strip().decode("latin1")
         except:
-            print sys.stderr, "error reading channel configuration, line: " + line
+            print "error reading channel configuration, line: " + line
     
     # get the program data
     # looping for the days (range: start number, numbers count)
@@ -154,7 +154,7 @@ class Parser():
             if  not os.path.isfile(filename):
                 raise Warning(filename)
         except:
-            print sys.stderr, "error retrieve / open file: " +filename
+            print "error retrieve / open file: " +filename
             return str()
         return open(filename, 'r').read()
     
@@ -168,7 +168,7 @@ class Parser():
             if  not os.path.isfile(filename):
                 raise Warning(filename)
         except:
-            print sys.stderr, "error retrieve / open file: " +filename
+            print "error retrieve / open file: " +filename
             return str()
         return open(filename, 'r').read()
     
@@ -181,14 +181,14 @@ class Parser():
         else:
             # use channelWeek to get the hole week for one channel
             filename = ArgumentParser.args.cachedir +"/week="+str(week)+"-channel="+str(channelId)+".html"
-            grabUrl = base_url + "/tvtv/index.vm?weekId="+str(week)+"&dayId=0&channelWeek="+str(channelId)
+            grabUrl = base_url + "/tvtv/index.vm?weekId="+str(week)+"&dayId=0&weekChannel="+str(channelId)
         try:
             if not ArgumentParser.args.local:
                 urllib.urlretrieve(grabUrl, filename)
             if  not os.path.isfile(filename):
                 raise Warning(filename)
         except:
-            print sys.stderr, "error retrieve / open file: " +filename
+            print "error retrieve / open file: " +filename
             return str()
         return open(filename, 'r').read()
     
@@ -203,7 +203,7 @@ class Parser():
             if  not os.path.isfile(filename):
                 raise Warning(filename)
         except:
-            print sys.stderr, "error retrieve / open file: " +filename
+            print "error retrieve / open file: " +filename
             return str()
         os.utime(filename, None)    ## "touch" the file
         return open(filename, 'r').read()
@@ -228,98 +228,98 @@ def parseChannelList(pagename):
 
 def parseChannelData(pagename, week, day):
     for channelId in DataStorage.channelList.keys():
-        for dayLine in Parser.getDayPage(pagename, week, day, channelId).split('\n'):
-            for programId in RegExStorage.regExProgramId.findall(dayLine):
-                # create the progam data container
-                if not DataStorage.programData.has_key(programId):
-                    DataStorage.programData[programId] = dict()
-                programPage = Parser.getProgramPage(pagename, programId)
-                
-                # get the channel id from the page
-                for foundStr in RegExStorage.regExChannelId3.findall(programPage):
-                    tempStr = FilterStringForTags(foundStr)
-                    if tempStr != "":
-                        DataStorage.programData[programId]['channelid'] = tempStr
-                # get the title from the page
-                for foundStr in RegExStorage.regExTitle.findall(programPage):
-                    tempStr = FilterStringForTags(foundStr)
-                    if tempStr != "":
-                        DataStorage.programData[programId]['title'] = tempStr
-                # year
-                for foundStr in RegExStorage.regExYear.findall(programPage):
-                    DataStorage.programData[programId]['year'] = FilterStringForTags(foundStr)
-                
-                #cut down the content
-                try:
-                    programPage = programPage.split(r'class="program-content"')[1]
-                    programPage = programPage.split(r'class="list_detail"')[0]
-                except:
-                    print sys.stderr, "parsing exception in {0} (week {1}, day {2})".format(programId, week, day)
-                
-                # sub-title
-                for foundStr in RegExStorage.regExSubtitle.findall(programPage):
-                    DataStorage.programData[programId]['sub-title'] = FilterStringForTags(foundStr)
-                # episode
-                episodeString = ""
-                for foundStr in RegExStorage.regExEpisode.findall(programPage):
-                    episodeString = episodeString +' '+ foundStr.strip()
-                episodeString = episodeString.strip()
-                if episodeString != "":
-                    DataStorage.programData[programId]['episode'] = FilterStringForTags(episodeString)
-                
-                # description
-                for foundStr in RegExStorage.regExDescription.findall(programPage):
-                    DataStorage.programData[programId]['description'] = FilterStringForTags(foundStr)
-                
-                # date
-                for foundStr in RegExStorage.regExDate.findall(programPage):
-                    DataStorage.programData[programId]['date'] = foundStr.strip()
-                # start date
-                for foundStr in RegExStorage.regExStart.findall(programPage):
-                    DataStorage.programData[programId]['start'] = foundStr.strip()
-                # finish date
-                for foundStr in RegExStorage.regExFinish.findall(programPage):
-                    DataStorage.programData[programId]['finish'] = foundStr.strip()
-                
-                # actors
-                for foundStr in RegExStorage.regExActors.findall(programPage):
-                    DataStorage.programData[programId]['actors'] = FilterStringForTags(foundStr)
-                # production
-                for foundStr in RegExStorage.regExProducer.findall(programPage):
-                    DataStorage.programData[programId]['producer'] = FilterStringForTags(foundStr)
-                # direction
-                for foundStr in RegExStorage.regExDirector.findall(programPage):
-                    DataStorage.programData[programId]['director'] = FilterStringForTags(foundStr)
-                # author
-                for foundStr in RegExStorage.regExAuthor.findall(programPage):
-                    DataStorage.programData[programId]['author'] = FilterStringForTags(foundStr)
-                # camera
-                #for foundStr in RegExStorage.regExCamera.findall(programPage):
-                #    DataStorage.programData[programId]['camera'] = FilterStringForTags(foundStr)
-                # kid protection
-                for foundStr in RegExStorage.regExKidProtection.findall(programPage):
-                    DataStorage.programData[programId]['kidprotection'] = FilterStringForTags(foundStr)
-                # category
-                for foundStr in RegExStorage.regExCategory.findall(programPage):
-                    DataStorage.programData[programId]['category'] = FilterStringForTags(foundStr)
-                # country
-                for foundStr in RegExStorage.regExCountry.findall(programPage):
-                    DataStorage.programData[programId]['country'] = FilterStringForTags(foundStr)
-                # stage setting
-                #for foundStr in RegExStorage.regExStageSetting.findall(programPage):
-                #    DataStorage.programData[programId]['stagesetting'] = FilterStringForTags(foundStr)
-                # music
-                #for foundStr in RegExStorage.regExMusic.findall(programPage):
-                #    DataStorage.programData[programId]['music'] = FilterStringForTags(foundStr)
-                # original title
-                for foundStr in RegExStorage.regExOrgTitle.findall(programPage):
-                    DataStorage.programData[programId]['orgtitle'] = FilterStringForTags(foundStr)
-                # presenter
-                for foundStr in RegExStorage.regExPresenter.findall(programPage):
-                    DataStorage.programData[programId]['presenter'] = FilterStringForTags(foundStr)
-                # press
-                #for foundStr in RegExStorage.regExPress.findall(programPage):
-                #    DataStorage.programData[programId]['reporter'] = FilterStringForTags(foundStr)
+        channelPage = Parser.getDayPage(pagename, week, day, channelId)
+        for programId in RegExStorage.regExProgramId.findall(channelPage):
+            # create the progam data container
+            if not DataStorage.programData.has_key(programId):
+                DataStorage.programData[programId] = dict()
+            programPage = Parser.getProgramPage(pagename, programId)
+            
+            # get the channel id from the page
+            for foundStr in RegExStorage.regExChannelId3.findall(programPage):
+                tempStr = FilterStringForTags(foundStr)
+                if tempStr != "":
+                    DataStorage.programData[programId]['channelid'] = tempStr
+            # get the title from the page
+            for foundStr in RegExStorage.regExTitle.findall(programPage):
+                tempStr = FilterStringForTags(foundStr)
+                if tempStr != "":
+                    DataStorage.programData[programId]['title'] = tempStr
+            # year
+            for foundStr in RegExStorage.regExYear.findall(programPage):
+                DataStorage.programData[programId]['year'] = FilterStringForTags(foundStr)
+            
+            #cut down the content
+            try:
+                programPage = programPage.split(r'class="program-content"')[1]
+                programPage = programPage.split(r'class="list_detail"')[0]
+            except:
+                print "parsing exception in {0} (week {1}, day {2})".format(programId, week, day)
+            
+            # sub-title
+            for foundStr in RegExStorage.regExSubtitle.findall(programPage):
+                DataStorage.programData[programId]['sub-title'] = FilterStringForTags(foundStr)
+            # episode
+            episodeString = ""
+            for foundStr in RegExStorage.regExEpisode.findall(programPage):
+                episodeString = episodeString +' '+ foundStr.strip()
+            episodeString = episodeString.strip()
+            if episodeString != "":
+                DataStorage.programData[programId]['episode'] = FilterStringForTags(episodeString)
+            
+            # description
+            for foundStr in RegExStorage.regExDescription.findall(programPage):
+                DataStorage.programData[programId]['description'] = FilterStringForTags(foundStr)
+            
+            # date
+            for foundStr in RegExStorage.regExDate.findall(programPage):
+                DataStorage.programData[programId]['date'] = foundStr.strip()
+            # start date
+            for foundStr in RegExStorage.regExStart.findall(programPage):
+                DataStorage.programData[programId]['start'] = foundStr.strip()
+            # finish date
+            for foundStr in RegExStorage.regExFinish.findall(programPage):
+                DataStorage.programData[programId]['finish'] = foundStr.strip()
+            
+            # actors
+            for foundStr in RegExStorage.regExActors.findall(programPage):
+                DataStorage.programData[programId]['actors'] = FilterStringForTags(foundStr)
+            # production
+            for foundStr in RegExStorage.regExProducer.findall(programPage):
+                DataStorage.programData[programId]['producer'] = FilterStringForTags(foundStr)
+            # direction
+            for foundStr in RegExStorage.regExDirector.findall(programPage):
+                DataStorage.programData[programId]['director'] = FilterStringForTags(foundStr)
+            # author
+            for foundStr in RegExStorage.regExAuthor.findall(programPage):
+                DataStorage.programData[programId]['author'] = FilterStringForTags(foundStr)
+            # camera
+            #for foundStr in RegExStorage.regExCamera.findall(programPage):
+            #    DataStorage.programData[programId]['camera'] = FilterStringForTags(foundStr)
+            # kid protection
+            for foundStr in RegExStorage.regExKidProtection.findall(programPage):
+                DataStorage.programData[programId]['kidprotection'] = FilterStringForTags(foundStr)
+            # category
+            for foundStr in RegExStorage.regExCategory.findall(programPage):
+                DataStorage.programData[programId]['category'] = FilterStringForTags(foundStr)
+            # country
+            for foundStr in RegExStorage.regExCountry.findall(programPage):
+                DataStorage.programData[programId]['country'] = FilterStringForTags(foundStr)
+            # stage setting
+            #for foundStr in RegExStorage.regExStageSetting.findall(programPage):
+            #    DataStorage.programData[programId]['stagesetting'] = FilterStringForTags(foundStr)
+            # music
+            #for foundStr in RegExStorage.regExMusic.findall(programPage):
+            #    DataStorage.programData[programId]['music'] = FilterStringForTags(foundStr)
+            # original title
+            for foundStr in RegExStorage.regExOrgTitle.findall(programPage):
+                DataStorage.programData[programId]['orgtitle'] = FilterStringForTags(foundStr)
+            # presenter
+            for foundStr in RegExStorage.regExPresenter.findall(programPage):
+                DataStorage.programData[programId]['presenter'] = FilterStringForTags(foundStr)
+            # press
+            #for foundStr in RegExStorage.regExPress.findall(programPage):
+            #    DataStorage.programData[programId]['reporter'] = FilterStringForTags(foundStr)
 
 class RegExStorage():
     # for the configuration workflow
@@ -382,7 +382,7 @@ def WriteXmlTvFile(base_url):
             name = etree.SubElement(channel, "display-name")
             name.text = unicode(DataStorage.channelList[channelid])
         except:
-            print sys.stderr, "error create xmltv tags for channelid " + channelid
+            print "error create xmltv tags for channelid " + channelid
     
     # list the program
     for programid in sorted(DataStorage.programData.keys()):
@@ -404,7 +404,7 @@ def WriteXmlTvFile(base_url):
                         enddate = enddate + datetime.timedelta(days=1)  # program ends next day
                     program.set("stop", enddate.strftime("%Y%m%d%H%M"))
             except:
-                print sys.stderr, "error setting the end datetime of programid " +programid
+                print "error setting the end datetime of programid " +programid
             # set the channelid - required
             program.set("channel", pdata["channelid"])
             
@@ -488,13 +488,13 @@ def WriteXmlTvFile(base_url):
                 kidprotsubtag.text = unicode(pdata["kidprotection"].strip())
             
         except:
-            print sys.stderr, "error create xmltv tags for programid " + programid
+            print "error create xmltv tags for programid " + programid
     
     # open the output file
     try:
         outfile = open(ArgumentParser.args.outputfile, 'w')
     except:
-        print sys.stderr, "error writing outputfile, file: " +ArgumentParser.args.outputfile
+        print "error writing outputfile, file: " +ArgumentParser.args.outputfile
         sys.exit(-1)
     
     # write the header and content
@@ -503,7 +503,7 @@ def WriteXmlTvFile(base_url):
     #for program in DataStorage.programData.keys():
     #    outfile.write( str(program)+': '+str(DataStorage.programData[program])+'\n')
     outfile.close()
-    print sys.stdout, "xmltv file successfully written, file: " +ArgumentParser.args.outputfile
+    print "xmltv file successfully written, file: " +ArgumentParser.args.outputfile
 
 # open the gui
 if __name__ == "__main__":

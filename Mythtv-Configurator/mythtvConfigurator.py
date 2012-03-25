@@ -29,8 +29,8 @@ class MainDialog(QDialog):
                             default=os.getenv("HOME")+"/.mythtv/mysql.txt",
                             help='mythtv database configuration file')
         arguments = parser.parse_args()
-        self.yatvgrabberConfigFile = arguments.channelconf
-        self.mythtvDbConfig = ConfigObj(arguments.mythtvdbconf, raise_errors=True)
+        self.yatvgrabberConfigFile = os.path.realpath(arguments.channelconf)
+        self.mythtvDbConfig = ConfigObj(os.path.realpath(arguments.mythtvdbconf), raise_errors=True)
         
         # load the data from the mythtv database
         db = _mysql.connect(host=self.mythtvDbConfig["DBHostName"],
