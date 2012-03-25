@@ -156,7 +156,7 @@ class Parser():
         except:
             print "error retrieve / open file: " +filename
             return str()
-        return open(filename, 'r').read()
+        return open(filename, 'r').read().decode("utf-8")
     
     @staticmethod
     def getAdditionalPage(base_url):
@@ -170,7 +170,7 @@ class Parser():
         except:
             print "error retrieve / open file: " +filename
             return str()
-        return open(filename, 'r').read()
+        return open(filename, 'r').read().decode("utf-8")
     
     @staticmethod
     def getDayPage(base_url, week, day, channelId):
@@ -190,7 +190,7 @@ class Parser():
         except:
             print "error retrieve / open file: " +filename
             return str()
-        return open(filename, 'r').read()
+        return open(filename, 'r').read().decode("utf-8")
     
     @staticmethod
     def getProgramPage(base_url, programId):
@@ -206,7 +206,7 @@ class Parser():
             print "error retrieve / open file: " +filename
             return str()
         os.utime(filename, None)    ## "touch" the file
-        return open(filename, 'r').read()
+        return open(filename, 'r').read().decode("utf-8")
 
 def parseChannelList(pagename):
     """parse the overview and additional pages for channel ids"""
@@ -498,8 +498,8 @@ def WriteXmlTvFile(base_url):
         sys.exit(-1)
     
     # write the header and content
-    outfile.write(etree.tostring(root, encoding="UTF-8", xml_declaration=True, pretty_print=True,
-                                       doctype="<!DOCTYPE tv SYSTEM \"xmltv.dtd\">"))
+    outfile.write(etree.tostring(root, encoding="UTF-8", xml_declaration=True, pretty_print=True))
+    #                                   doctype="<!DOCTYPE tv SYSTEM \"xmltv.dtd\">"))
     #for program in DataStorage.programData.keys():
     #    outfile.write( str(program)+': '+str(DataStorage.programData[program])+'\n')
     outfile.close()
