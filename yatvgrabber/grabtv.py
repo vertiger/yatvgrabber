@@ -349,12 +349,13 @@ class RegExStorage():
     #regExStageSetting = re.compile(r'Bühnenbild:</td>(.+?)</tr>', re.DOTALL)
     #regExMusic = re.compile(r'>Musik:</td>(.+?)</tr>', re.DOTALL)
     regExOrgTitle = re.compile(r'>Orginaltitel:</td>(.+?)</tr>', re.DOTALL)
-    regExPresenter = re.compile(r'Präsentiert von:</td>(.+?)</tr>', re.DOTALL)
+    regExPresenter = re.compile(r'sentiert von:</td>(.+?)</tr>', re.DOTALL)
     #regExPress = re.compile(r'>Presse:</td>(.+?)</tr>', re.DOTALL)
     
     # special chars
     charSpecial = {1:  [re.compile(r'<[^>]*>'), r' '],
                    2:  [re.compile(r'&nbsp;'), r' '],
+                   3:  [re.compile(r'\(Wiederholung\)'), r' '],
                    97: [re.compile(r'c\<t'), r'c\'t'],
                    98: [re.compile(r'[\n\t ]+', re.DOTALL), r' '],
                    99: [re.compile(r',$'), r'']}
