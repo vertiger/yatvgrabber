@@ -174,6 +174,7 @@ class Parser():
     
     @staticmethod
     def getDayPage(base_url, week, day, channelId):
+        print "grabbing " +base_url+ " week " +str(week)+ " day " +str(day)+ " channelid " +str(channelId)
         if (day > -1):
             # always retrieve the day page in none local mode
             filename = ArgumentParser.args.cachedir +"/week="+str(week)+"-day="+str(day)+"-channel="+str(channelId)+".html"
@@ -255,6 +256,8 @@ def parseChannelData(pagename, week, day):
                 programPage = programPage.split(r'class="list_detail"')[0]
             except:
                 print "parsing exception in {0} (week {1}, day {2})".format(programId, week, day)
+                # no right content - delete the file for another run
+                os.remove(ArgumentParser.args.cachedir+"/"+str(programId)+".html")
             
             # sub-title
             for foundStr in RegExStorage.regExSubtitle.findall(programPage):
@@ -444,50 +447,48 @@ def WriteXmlTvFile(base_url):
             creditstag = etree.SubElement(program, "credits")
             # director
             if pdata.has_key("director") and pdata["director"] != "":
-                try:
-                    for foundStr in pdata["director"].split(','):
+                for foundStr in pdata["director"].split(','):
+                    try:
                         director = etree.SubElement(creditstag, "director")
                         director.text = unicode(foundStr.strip())
-                except:
-                    print "error setting director of programid " +programid
+                    except:
+                        print "error setting director of programid " +programid
             # actor
             if pdata.has_key("actors") and pdata["actors"] != "":
-                try:
-                    for foundStr in pdata["actors"].split(','):
+                for foundStr in pdata["actors"].split(','):
+                    try:
                         actor = etree.SubElement(creditstag, "actor")
-                        if foundStr.find('(') == -1:
-                            actor.text = unicode(foundStr.strip())
-                        else:
+                        try:
                             (fActor, fRole) = foundStr.strip().split('(')
-                            actor.text = unicode(fActor.strip())
-                            if (fRole != None):
-                                actor.set("role", unicode(fRole.rstrip(') ')))
-                except:
-                    print "error setting actors of programid " +programid
+                            actor.text = unicode(fActor.strip(), role=unicode(fRole.rstrip(') ')))
+                        except:
+                            actor.text = unicode(foundStr.strip())
+                    except:
+                        print "error setting actors of programid " +programid
             # writer
             if pdata.has_key("author") and pdata["author"] != "":
-                try:
-                    for foundStr in pdata["author"].split(','):
+                for foundStr in pdata["author"].split(','):
+                    try:
                         writer = etree.SubElement(creditstag, "writer")
                         writer.text = unicode(foundStr.strip())
-                except:
-                    print "error setting author of programid " +programid
+                    except:
+                        print "error setting author of programid " +programid
             # producer
             if pdata.has_key("producer") and pdata["producer"] != "":
-                try:
-                    for foundStr in pdata["producer"].split(','):
+                for foundStr in pdata["producer"].split(','):
+                    try:
                         producer = etree.SubElement(creditstag, "producer")
                         producer.text = unicode(foundStr.strip())
-                except:
-                    print "error setting producer of programid " +programid
+                    except:
+                        print "error setting producer of programid " +programid
             # presenter
             if pdata.has_key("presenter") and pdata["presenter"] != "":
-                try:
-                    for foundStr in pdata["presenter"].split(','):
+                for foundStr in pdata["presenter"].split(','):
+                    try:
                         presenter = etree.SubElement(creditstag, "presenter")
                         presenter.text = unicode(foundStr.strip())
-                except:
-                    print "error setting presenter of programid " +programid
+                    except:
+                        print "error setting presenter of programid " +programid
             
             # date - production year
             if pdata.has_key("year") and pdata["year"] != "":
@@ -499,21 +500,21 @@ def WriteXmlTvFile(base_url):
             
             # category
             if pdata.has_key("category") and pdata["category"] != "":
-                try:
-                    for foundStr in pdata["category"].split(','):
+                for foundStr in pdata["category"].split(','):
+                    try:
                         category = etree.SubElement(program, "category", lang="de")
                         category.text = unicode(foundStr.strip())
-                except:
-                    print "error setting category of programid " +programid
+                    except:
+                        print "error setting category of programid " +programid
             
             # country
             if pdata.has_key("country") and pdata["country"] != "":
-                try:
-                    for foundStr in pdata["country"].split(','):
+                for foundStr in pdata["country"].split(','):
+                    try:
                         country = etree.SubElement(program, "country")
                         country.text = unicode(foundStr.strip())
-                except:
-                    print "error setting country of programid " +programid
+                    except:
+                        print "error setting country of programid " +programid
             
             # kid protection
             if pdata.has_key("kidprotection") and pdata["kidprotection"] != "":
