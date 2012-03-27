@@ -76,8 +76,9 @@ def main():
     # export the program data to xmltv file
     WriteXmlTvFile(grabConf['page'][0])
     
-    # post grab cleanup
-    postGrabCleanUp()
+    # post grab cleanup - do not cleanup after process locally
+    if not ArgumentParser.args.local:
+        postGrabCleanUp()
 
 class DataStorage():
     channelList = dict()
@@ -236,6 +237,20 @@ def parseChannelData(pagename, week, day):
                 DataStorage.programData[programId] = dict()
             programPage = Parser.getProgramPage(pagename, programId)
             
+            # min data found?
+            try:
+                if RegExStorage.regExChannelId3.search(programPage) == None:
+                    raise Warning(programId)
+                if RegExStorage.regExDate.search(programPage) == None:
+                    raise Warning(programId)
+                if RegExStorage.regExStart.search(programPage) == None:
+                    raise Warning(programId)
+            except:
+                print "error finding the channel id, date, start time of programid " +programId
+                os.remove(ArgumentParser.args.cachedir+"/"+str(programId)+".html")
+                DataStorage.programData[programId] = dict()
+                continue
+            
             # get the channel id from the page
             for foundStr in RegExStorage.regExChannelId3.findall(programPage):
                 tempStr = FilterStringForTags(foundStr)
@@ -258,6 +273,8 @@ def parseChannelData(pagename, week, day):
                 print "parsing exception in {0} (week {1}, day {2})".format(programId, week, day)
                 # no right content - delete the file for another run
                 os.remove(ArgumentParser.args.cachedir+"/"+str(programId)+".html")
+                DataStorage.programData[programId] = dict()
+                continue
             
             # sub-title
             for foundStr in RegExStorage.regExSubtitle.findall(programPage):
@@ -268,7 +285,12 @@ def parseChannelData(pagename, week, day):
                 episodeString = episodeString +' '+ foundStr.strip()
             episodeString = episodeString.strip()
             if episodeString != "":
-                DataStorage.programData[programId]['episode'] = FilterStringForTags(episodeString)
+                for tmpStr in RegExStorage.regExEpisodeNum.findall(episodeString):
+                    DataStorage.programData[programId]['episode'] = tmpStr
+                for tmpStr in RegExStorage.regExEpisodeTotal.findall(episodeString):
+                    DataStorage.programData[programId]['episode-total'] = tmpStr
+                for tmpStr in RegExStorage.regExSeason.findall(episodeString):
+                    DataStorage.programData[programId]['season'] = tmpStr
             
             # description
             for foundStr in RegExStorage.regExDescription.findall(programPage):
@@ -349,6 +371,9 @@ class RegExStorage():
     regExKidProtection = re.compile(r'>FSK:</td>.*: ([0-9]+).*</tr>', re.DOTALL)
     regExCategory = re.compile(r'>Kategorie:</td>(.+?)</tr>', re.DOTALL)
     regExCountry = re.compile(r'>Land:</td>(.+?)</tr>', re.DOTALL)
+    regExSeason = re.compile(r'Staffel ([0-9]+)')
+    regExEpisodeNum = re.compile(r'Folge ([0-9]+)')
+    regExEpisodeTotal = re.compile(r'Folge [0-9]+/([0-9]+)')
     #regExStageSetting = re.compile(r'Bühnenbild:</td>(.+?)</tr>', re.DOTALL)
     #regExMusic = re.compile(r'>Musik:</td>(.+?)</tr>', re.DOTALL)
     regExOrgTitle = re.compile(r'>Orginaltitel:</td>(.+?)</tr>', re.DOTALL)
@@ -393,12 +418,16 @@ def WriteXmlTvFile(base_url):
         try:
             pdata = DataStorage.programData[programid]
             # create the main tag
-            program = etree.SubElement(root, "programme")
+            program = etree.Element("programme")
             # set the start datetime - required
-            (day, month, year) = pdata["date"].split('.')
-            (starthour, startminute) = pdata["start"].split(':')
-            startdate = datetime.datetime(int(year), int(month), int(day), int(starthour), int(startminute))
-            program.set("start", startdate.strftime("%Y%m%d%H%M"))
+            try:
+                (day, month, year) = pdata["date"].split('.')
+                (starthour, startminute) = pdata["start"].split(':')
+                startdate = datetime.datetime(int(year), int(month), int(day), int(starthour), int(startminute))
+                program.set("start", startdate.strftime("%Y%m%d%H%M"))
+            except:
+                print "error setting start time of programid " +programid
+                continue
             # set the end datetime
             if pdata.has_key("finish") and pdata["finish"] != "":
                 try:
@@ -412,118 +441,97 @@ def WriteXmlTvFile(base_url):
             # set the channelid - required
             program.set("channel", pdata["channelid"])
             
+            # got all required fields, add element to root element
+            root.append(program)
+            
             # create the title subtag
+            tempstr = str()
             if pdata.has_key("title") and pdata["title"] != "":
-                try:
-                    title = etree.SubElement(program, "title")
-                    title.text = unicode(pdata["title"])
-                except:
-                    print "error setting title of programid " +programid
+                tempstr = pdata["title"]
+            if pdata.has_key("orgtitle") and pdata["orgtitle"] != "":
+                if tempstr.find(pdata["orgtitle"]) == -1:
+                    tempstr = pdata["orgtitle"] +" - "+ tempstr
+            if tempstr != "":
+                title = etree.SubElement(program, "title")
+                title.text = unicode(tempstr)
             # create the sub-title
-            try:
-                if pdata.has_key("sub-title") and pdata["sub-title"] != "":
-                    subtitle = etree.SubElement(program, "sub-title")
-                    subtitle.text = unicode(pdata["sub-title"])
-                else:
-                    if pdata.has_key("episode") and pdata["episode"] != "":
-                        subtitle = etree.SubElement(program, "sub-title")
-                        subtitle.text = unicode(pdata["episode"])
-                    else:
-                        if pdata.has_key("orgtitle") and pdata["orgtitle"] != "":
-                            subtitle = etree.SubElement(program, "sub-title")
-                            subtitle.text = unicode(pdata["orgtitle"])
-            except:
-                print "error setting subtitle of programid " +programid
+            if pdata.has_key("sub-title") and pdata["sub-title"] != "":
+                subtitle = etree.SubElement(program, "sub-title")
+                subtitle.text = unicode(pdata["sub-title"])
             
             # create the description subtag
             if pdata.has_key("description") and pdata["description"] != "":
-                try:
-                    desc = etree.SubElement(program, "desc")
-                    desc.text = unicode(pdata["description"])
-                except:
-                    print "error setting description of programid " +programid
+                desc = etree.SubElement(program, "desc")
+                desc.text = unicode(pdata["description"])
             
             # create the creditstag subtag
             creditstag = etree.SubElement(program, "credits")
             # director
             if pdata.has_key("director") and pdata["director"] != "":
                 for foundStr in pdata["director"].split(','):
-                    try:
-                        director = etree.SubElement(creditstag, "director")
-                        director.text = unicode(foundStr.strip())
-                    except:
-                        print "error setting director of programid " +programid
+                    director = etree.SubElement(creditstag, "director")
+                    director.text = unicode(foundStr.strip())
             # actor
             if pdata.has_key("actors") and pdata["actors"] != "":
                 for foundStr in pdata["actors"].split(','):
+                    actor = etree.SubElement(creditstag, "actor")
                     try:
-                        actor = etree.SubElement(creditstag, "actor")
-                        try:
-                            (fActor, fRole) = foundStr.strip().split('(')
-                            actor.text = unicode(fActor.strip(), role=unicode(fRole.rstrip(') ')))
-                        except:
-                            actor.text = unicode(foundStr.strip())
+                        (fActor, fRole) = foundStr.strip().split('(')
+                        actor.text = unicode(fActor.strip())
+                        actor.set("role", unicode(fRole.strip(') ')))
                     except:
-                        print "error setting actors of programid " +programid
+                        actor.text = unicode(foundStr.strip())
             # writer
             if pdata.has_key("author") and pdata["author"] != "":
                 for foundStr in pdata["author"].split(','):
-                    try:
-                        writer = etree.SubElement(creditstag, "writer")
-                        writer.text = unicode(foundStr.strip())
-                    except:
-                        print "error setting author of programid " +programid
+                    writer = etree.SubElement(creditstag, "writer")
+                    writer.text = unicode(foundStr.strip())
             # producer
             if pdata.has_key("producer") and pdata["producer"] != "":
                 for foundStr in pdata["producer"].split(','):
-                    try:
-                        producer = etree.SubElement(creditstag, "producer")
-                        producer.text = unicode(foundStr.strip())
-                    except:
-                        print "error setting producer of programid " +programid
+                    producer = etree.SubElement(creditstag, "producer")
+                    producer.text = unicode(foundStr.strip())
             # presenter
             if pdata.has_key("presenter") and pdata["presenter"] != "":
                 for foundStr in pdata["presenter"].split(','):
-                    try:
-                        presenter = etree.SubElement(creditstag, "presenter")
-                        presenter.text = unicode(foundStr.strip())
-                    except:
-                        print "error setting presenter of programid " +programid
+                    presenter = etree.SubElement(creditstag, "presenter")
+                    presenter.text = unicode(foundStr.strip())
             
             # date - production year
             if pdata.has_key("year") and pdata["year"] != "":
-                try:
-                    productionDate = etree.SubElement(program, "date")
-                    productionDate.text = unicode(pdata["year"])
-                except:
-                    print "error setting date of programid " +programid
+                productionDate = etree.SubElement(program, "date")
+                productionDate.text = unicode(pdata["year"])
             
             # category
             if pdata.has_key("category") and pdata["category"] != "":
                 for foundStr in pdata["category"].split(','):
-                    try:
-                        category = etree.SubElement(program, "category", lang="de")
-                        category.text = unicode(foundStr.strip())
-                    except:
-                        print "error setting category of programid " +programid
+                    category = etree.SubElement(program, "category", lang="de")
+                    category.text = unicode(foundStr.strip())
             
             # country
             if pdata.has_key("country") and pdata["country"] != "":
                 for foundStr in pdata["country"].split(','):
-                    try:
-                        country = etree.SubElement(program, "country")
-                        country.text = unicode(foundStr.strip())
-                    except:
-                        print "error setting country of programid " +programid
+                    country = etree.SubElement(program, "country")
+                    country.text = unicode(foundStr.strip())
+            
+            # episode
+            tempstr = str()
+            if pdata.has_key("season") and pdata["season"] != "":
+                tempstr = str(int(pdata["season"]) - 1)
+            tempstr += '.'
+            if pdata.has_key("episode") and pdata["episode"] != "":
+                tempstr += str(int(pdata["episode"]) - 1)
+                if pdata.has_key("episode-total") and pdata["episode-total"] != "":
+                    tempstr +='/' + pdata["episode-total"]
+            if tempstr != ".":
+                episodenum = etree.SubElement(program, "episode-num", system="xmltv_ns")
+                episodenum.text = tempstr + '.'
             
             # kid protection
             if pdata.has_key("kidprotection") and pdata["kidprotection"] != "":
-                try:
-                    kidprotection = etree.SubElement(program, "rating", system="FSK")
-                    kidprotsubtag = etree.SubElement(kidprotection, "value")
-                    kidprotsubtag.text = unicode(pdata["kidprotection"].strip())
-                except:
-                    print "error setting rating of programid " +programid
+                kidprotection = etree.SubElement(program, "rating", system="FSK")
+                kidprotsubtag = etree.SubElement(kidprotection, "value")
+                kidprotsubtag.text = unicode(pdata["kidprotection"].strip())
             
         except:
             print "error create xmltv tags for programid " + programid
