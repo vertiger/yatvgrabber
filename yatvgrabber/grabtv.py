@@ -12,6 +12,7 @@ import subprocess
 from lxml import etree
 from random import choice
 from configobj import ConfigObj
+from multiprocessing import Pool
 
 def main():
     # argument parsing
@@ -61,17 +62,7 @@ def main():
             print "error reading channel configuration, line: " + line
     
     # get the program data
-    # looping for the days (range: start number, numbers count)
-    weeksToGrab = ArgumentParser.args.days // 7
-    leftoverDaysToGrab = ArgumentParser.args.days % 7
-    lastWeek = 0
-    if weeksToGrab > 0:
-        for weekno in range(0, weeksToGrab):
-            parseChannelData(grabConf['page'][0], weekno, -1)
-            lastWeek = weekno + 1
-    if leftoverDaysToGrab > 0:
-        for dayno in range(0, leftoverDaysToGrab):
-            parseChannelData(grabConf['page'][0], lastWeek, dayno)
+    parseChannelData(grabConf['page'][0], ArgumentParser.args.days)
     
     # export the program data to xmltv file
     WriteXmlTvFile(grabConf['page'][0])
@@ -228,123 +219,149 @@ def parseChannelList(pagename):
     
     return channellist
 
-def parseChannelData(pagename, week, day):
-    for channelId in DataStorage.channelList.keys():
-        channelPage = Parser.getDayPage(pagename, week, day, channelId)
-        for programId in RegExStorage.regExProgramId.findall(channelPage):
-            # create the progam data container
-            if not DataStorage.programData.has_key(programId):
-                DataStorage.programData[programId] = dict()
-            programPage = Parser.getProgramPage(pagename, programId)
-            
-            # min data found?
-            try:
-                if RegExStorage.regExChannelId3.search(programPage) == None:
-                    raise Warning(programId)
-                if RegExStorage.regExDate.search(programPage) == None:
-                    raise Warning(programId)
-                if RegExStorage.regExStart.search(programPage) == None:
-                    raise Warning(programId)
-            except:
-                print "error finding the channel id, date, start time of programid " +programId
-                os.remove(ArgumentParser.args.cachedir+"/"+str(programId)+".html")
-                DataStorage.programData[programId] = dict()
-                continue
-            
-            # get the channel id from the page
-            for foundStr in RegExStorage.regExChannelId3.findall(programPage):
-                tempStr = FilterStringForTags(foundStr)
-                if tempStr != "":
-                    DataStorage.programData[programId]['channelid'] = tempStr
-            # get the title from the page
-            for foundStr in RegExStorage.regExTitle.findall(programPage):
-                tempStr = FilterStringForTags(foundStr)
-                if tempStr != "":
-                    DataStorage.programData[programId]['title'] = tempStr
-            # year
-            for foundStr in RegExStorage.regExYear.findall(programPage):
-                DataStorage.programData[programId]['year'] = FilterStringForTags(foundStr)
-            
-            #cut down the content
-            try:
-                programPage = programPage.split(r'class="program-content"')[1]
-                programPage = programPage.split(r'class="list_detail"')[0]
-            except:
-                print "parsing exception in {0} (week {1}, day {2})".format(programId, week, day)
-                # no right content - delete the file for another run
-                os.remove(ArgumentParser.args.cachedir+"/"+str(programId)+".html")
-                DataStorage.programData[programId] = dict()
-                continue
-            
-            # sub-title
-            for foundStr in RegExStorage.regExSubtitle.findall(programPage):
-                DataStorage.programData[programId]['sub-title'] = FilterStringForTags(foundStr)
-            # episode
-            episodeString = ""
-            for foundStr in RegExStorage.regExEpisode.findall(programPage):
-                episodeString = episodeString +' '+ foundStr.strip()
-            episodeString = episodeString.strip()
-            if episodeString != "":
-                for tmpStr in RegExStorage.regExEpisodeNum.findall(episodeString):
-                    DataStorage.programData[programId]['episode'] = tmpStr
-                for tmpStr in RegExStorage.regExEpisodeTotal.findall(episodeString):
-                    DataStorage.programData[programId]['episode-total'] = tmpStr
-                for tmpStr in RegExStorage.regExSeason.findall(episodeString):
-                    DataStorage.programData[programId]['season'] = tmpStr
-            
-            # description
-            for foundStr in RegExStorage.regExDescription.findall(programPage):
-                DataStorage.programData[programId]['description'] = FilterStringForTags(foundStr)
-            
-            # date
-            for foundStr in RegExStorage.regExDate.findall(programPage):
-                DataStorage.programData[programId]['date'] = foundStr.strip()
-            # start date
-            for foundStr in RegExStorage.regExStart.findall(programPage):
-                DataStorage.programData[programId]['start'] = foundStr.strip()
-            # finish date
-            for foundStr in RegExStorage.regExFinish.findall(programPage):
-                DataStorage.programData[programId]['finish'] = foundStr.strip()
-            
-            # actors
-            for foundStr in RegExStorage.regExActors.findall(programPage):
-                DataStorage.programData[programId]['actors'] = FilterStringForTags(foundStr)
-            # production
-            for foundStr in RegExStorage.regExProducer.findall(programPage):
-                DataStorage.programData[programId]['producer'] = FilterStringForTags(foundStr)
-            # direction
-            for foundStr in RegExStorage.regExDirector.findall(programPage):
-                DataStorage.programData[programId]['director'] = FilterStringForTags(foundStr)
-            # author
-            for foundStr in RegExStorage.regExAuthor.findall(programPage):
-                DataStorage.programData[programId]['author'] = FilterStringForTags(foundStr)
-            # camera
-            #for foundStr in RegExStorage.regExCamera.findall(programPage):
-            #    DataStorage.programData[programId]['camera'] = FilterStringForTags(foundStr)
-            # kid protection
-            for foundStr in RegExStorage.regExKidProtection.findall(programPage):
-                DataStorage.programData[programId]['kidprotection'] = FilterStringForTags(foundStr)
-            # category
-            for foundStr in RegExStorage.regExCategory.findall(programPage):
-                DataStorage.programData[programId]['category'] = FilterStringForTags(foundStr)
-            # country
-            for foundStr in RegExStorage.regExCountry.findall(programPage):
-                DataStorage.programData[programId]['country'] = FilterStringForTags(foundStr)
-            # stage setting
-            #for foundStr in RegExStorage.regExStageSetting.findall(programPage):
-            #    DataStorage.programData[programId]['stagesetting'] = FilterStringForTags(foundStr)
-            # music
-            #for foundStr in RegExStorage.regExMusic.findall(programPage):
-            #    DataStorage.programData[programId]['music'] = FilterStringForTags(foundStr)
-            # original title
-            for foundStr in RegExStorage.regExOrgTitle.findall(programPage):
-                DataStorage.programData[programId]['orgtitle'] = FilterStringForTags(foundStr)
-            # presenter
-            for foundStr in RegExStorage.regExPresenter.findall(programPage):
-                DataStorage.programData[programId]['presenter'] = FilterStringForTags(foundStr)
-            # press
-            #for foundStr in RegExStorage.regExPress.findall(programPage):
-            #    DataStorage.programData[programId]['reporter'] = FilterStringForTags(foundStr)
+def parseChannelData(pagename, days):
+    grabPlan = []
+    weeksToGrab = days // 7
+    leftoverDaysToGrab = days % 7
+    lastWeek = 0
+    if weeksToGrab > 0:
+        for weekno in range(0, weeksToGrab):
+            grabPlan.append([weekno, -1])
+            lastWeek = weekno + 1
+    if leftoverDaysToGrab > 0:
+        for dayno in range(0, leftoverDaysToGrab):
+            grabPlan.append([lastWeek, dayno])
+    
+    # multiprocessing
+    pool = Pool(processes=None)
+    
+    for entry in grabPlan:
+        for channelId in DataStorage.channelList.keys():
+            channelPage = Parser.getDayPage(pagename, entry[0], entry[1], channelId)
+            for programId in RegExStorage.regExProgramId.findall(channelPage):
+                # get the program page
+                programPage = Parser.getProgramPage(pagename, programId)
+                
+                pool.apply_async(processProgramPage, (programId, programPage,), callback=contentInjectCallback)
+    
+    pool.close()
+    pool.join()
+
+def contentInjectCallback(programEntry):
+    for programid in programEntry.keys():
+        if len(programEntry[programid]) == 0:
+            os.remove(ArgumentParser.args.cachedir+"/"+str(programid)+".html")
+        else:
+            DataStorage.programData[programid] = programEntry[programid]
+
+def processProgramPage(programId, programPage):
+    programData = { programId: dict() }
+    
+    # min data found?
+    try:
+        if RegExStorage.regExChannelId3.search(programPage) == None:
+            raise Warning(programId)
+        if RegExStorage.regExDate.search(programPage) == None:
+            raise Warning(programId)
+        if RegExStorage.regExStart.search(programPage) == None:
+            raise Warning(programId)
+    except:
+        print "error finding the channel id, date, start time of programid " +programId
+        return programData
+    
+    # get the channel id from the page
+    for foundStr in RegExStorage.regExChannelId3.findall(programPage):
+        tempStr = FilterStringForTags(foundStr)
+        if tempStr != "":
+            programData[programId]['channelid'] = tempStr
+    # get the title from the page
+    for foundStr in RegExStorage.regExTitle.findall(programPage):
+        tempStr = FilterStringForTags(foundStr)
+        if tempStr != "":
+            programData[programId]['title'] = tempStr
+    # year
+    for foundStr in RegExStorage.regExYear.findall(programPage):
+        programData[programId]['year'] = FilterStringForTags(foundStr)
+    
+    #cut down the content
+    try:
+        programPage = programPage.split(r'class="program-content"')[1]
+        programPage = programPage.split(r'class="list_detail"')[0]
+    except:
+        print "parsing exception of programid " +programId
+        # no right content - delete the file for another run
+        return { programId: dict() }
+    
+    # sub-title
+    for foundStr in RegExStorage.regExSubtitle.findall(programPage):
+        programData[programId]['sub-title'] = FilterStringForTags(foundStr)
+    # episode
+    episodeString = ""
+    for foundStr in RegExStorage.regExEpisode.findall(programPage):
+        episodeString = episodeString +' '+ foundStr.strip()
+    episodeString = episodeString.strip()
+    if episodeString != "":
+        for tmpStr in RegExStorage.regExEpisodeNum.findall(episodeString):
+            programData[programId]['episode'] = tmpStr
+        for tmpStr in RegExStorage.regExEpisodeTotal.findall(episodeString):
+            programData[programId]['episode-total'] = tmpStr
+        for tmpStr in RegExStorage.regExSeason.findall(episodeString):
+            programData[programId]['season'] = tmpStr
+    
+    # description
+    for foundStr in RegExStorage.regExDescription.findall(programPage):
+        programData[programId]['description'] = FilterStringForTags(foundStr)
+    
+    # date
+    for foundStr in RegExStorage.regExDate.findall(programPage):
+        programData[programId]['date'] = foundStr.strip()
+    # start date
+    for foundStr in RegExStorage.regExStart.findall(programPage):
+        programData[programId]['start'] = foundStr.strip()
+    # finish date
+    for foundStr in RegExStorage.regExFinish.findall(programPage):
+        programData[programId]['finish'] = foundStr.strip()
+    
+    # actors
+    for foundStr in RegExStorage.regExActors.findall(programPage):
+        programData[programId]['actors'] = FilterStringForTags(foundStr)
+    # production
+    for foundStr in RegExStorage.regExProducer.findall(programPage):
+        programData[programId]['producer'] = FilterStringForTags(foundStr)
+    # direction
+    for foundStr in RegExStorage.regExDirector.findall(programPage):
+        programData[programId]['director'] = FilterStringForTags(foundStr)
+    # author
+    for foundStr in RegExStorage.regExAuthor.findall(programPage):
+        programData[programId]['author'] = FilterStringForTags(foundStr)
+    # camera
+    #for foundStr in RegExStorage.regExCamera.findall(programPage):
+    #    DataStorage.programData[programId]['camera'] = FilterStringForTags(foundStr)
+    # kid protection
+    for foundStr in RegExStorage.regExKidProtection.findall(programPage):
+        programData[programId]['kidprotection'] = FilterStringForTags(foundStr)
+    # category
+    for foundStr in RegExStorage.regExCategory.findall(programPage):
+        programData[programId]['category'] = FilterStringForTags(foundStr)
+    # country
+    for foundStr in RegExStorage.regExCountry.findall(programPage):
+        programData[programId]['country'] = FilterStringForTags(foundStr)
+    # stage setting
+    #for foundStr in RegExStorage.regExStageSetting.findall(programPage):
+    #    DataStorage.programData[programId]['stagesetting'] = FilterStringForTags(foundStr)
+    # music
+    #for foundStr in RegExStorage.regExMusic.findall(programPage):
+    #    DataStorage.programData[programId]['music'] = FilterStringForTags(foundStr)
+    # original title
+    for foundStr in RegExStorage.regExOrgTitle.findall(programPage):
+        programData[programId]['orgtitle'] = FilterStringForTags(foundStr)
+    # presenter
+    for foundStr in RegExStorage.regExPresenter.findall(programPage):
+        programData[programId]['presenter'] = FilterStringForTags(foundStr)
+    # press
+    #for foundStr in RegExStorage.regExPress.findall(programPage):
+    #    DataStorage.programData[programId]['reporter'] = FilterStringForTags(foundStr)
+    return programData
 
 class RegExStorage():
     # for the configuration workflow
