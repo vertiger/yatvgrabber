@@ -401,6 +401,7 @@ class RegExStorage():
     charSpecial = {1:  [re.compile(r'<[^>]*>'), r' '],
                    2:  [re.compile(r'&nbsp;'), r' '],
                    3:  [re.compile(r'\(Wiederholung\)'), r''],
+                   4:  [re.compile(r'^Reihe: .+'), r''],
                    97: [re.compile(r'c\<t'), r'c\'t'],
                    98: [re.compile(r'[\n\t ]+', re.DOTALL), r' '],
                    99: [re.compile(r',$'), r'']}
