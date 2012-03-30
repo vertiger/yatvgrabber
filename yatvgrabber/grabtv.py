@@ -198,8 +198,7 @@ class Parser():
         except:
             print "error retrieve / open file: " +filename
             return str()
-        os.utime(filename, None)    ## "touch" the file
-        return open(filename, 'r').read().decode("utf-8")
+        return filename
 
 def parseChannelList(pagename):
     """parse the overview and additional pages for channel ids"""
@@ -240,21 +239,24 @@ def parseChannelData(pagename, days):
             channelPage = Parser.getDayPage(pagename, entry[0], entry[1], channelId)
             for programId in RegExStorage.regExProgramId.findall(channelPage):
                 # get the program page
-                programPage = Parser.getProgramPage(pagename, programId)
+                programFileName = Parser.getProgramPage(pagename, programId)
                 
-                pool.apply_async(processProgramPage, (programId, programPage,), callback=contentInjectCallback)
+                # pass the filename to the process for parsing
+                if programFileName != "":
+                    pool.apply_async(processProgramPage, (programId, programFileName,), callback=contentInjectCallback)
     
     pool.close()
     pool.join()
 
 def contentInjectCallback(programEntry):
     for programid in programEntry.keys():
-        if len(programEntry[programid]) == 0:
-            os.remove(ArgumentParser.args.cachedir+"/"+str(programid)+".html")
-        else:
-            DataStorage.programData[programid] = programEntry[programid]
+        DataStorage.programData[programid] = programEntry[programid]
 
-def processProgramPage(programId, programPage):
+def processProgramPage(programId, filename):
+    
+    os.utime(filename, None)    ## "touch" the file
+    programPage = open(filename, 'r').read().decode("utf-8")
+    
     programData = { programId: dict() }
     
     # min data found?
@@ -267,6 +269,7 @@ def processProgramPage(programId, programPage):
             raise Warning(programId)
     except:
         print "error finding the channel id, date, start time of programid " +programId
+        os.remove(filename)
         return programData
     
     # get the channel id from the page
@@ -289,7 +292,7 @@ def processProgramPage(programId, programPage):
         programPage = programPage.split(r'class="list_detail"')[0]
     except:
         print "parsing exception of programid " +programId
-        # no right content - delete the file for another run
+        os.remove(filename)
         return { programId: dict() }
     
     # sub-title
@@ -434,7 +437,7 @@ def WriteXmlTvFile(base_url):
     # list the program
     for programid in sorted(DataStorage.programData.keys()):
         try:
-            pdata = DataStorage.programData[programid]
+            pdata = DataStorage.programData.pop(programid)
             # create the main tag
             program = etree.Element("programme")
             # set the start datetime - required
