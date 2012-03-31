@@ -1,6 +1,10 @@
 todo
 
 python rewrite of the grabber script
-- use the tvtv main pages (multiple pages have to be supported, only download programs from the main base page)
-- additional base pages are for channel id grabbing (cofnigure)
-- parsing keywords needs to be adapted per main base page (language specific)
+- parsing keywords needs to be adapted per main base page (language specific), external RegEx module
+- damonize
+- lazy load (timing parameter)
+- write xml file on-the-fly
+- update only mode
+- grab selective date
+- use vim instead of gedit
