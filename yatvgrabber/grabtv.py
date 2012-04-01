@@ -6,6 +6,7 @@ import re
 import sys
 import codecs
 import signal
+import string
 import urllib
 #import logging
 import argparse
@@ -26,41 +27,48 @@ def main():
     preGrabCleanUp()
 
     # read / set the grabber configuration file
-    grabConf = ConfigObj(ArgumentParser.args.configfile, raise_errors=True)
-    if not os.path.isfile(ArgumentParser.args.configfile):
+    tmpConfigFile = ArgumentParser.args.configfile
+    grabConf = ConfigObj(tmpConfigFile, raise_errors=True)
+    if not os.path.isfile(tmpConfigFile):
         # write the default configuration
         grabConf['page'] = ['http://www.tvtv.ch','http://www.tvtv.de','http://www.tvtv.at','http://www.tvtv.co.uk','http://www.tvtv.fr','http://www.tvtv.it']
         try:
             grabConf.write()
         except:
-            print 'unable the write config file: ' +ArgumentParser.args.configfile
+            print 'unable the write config file: %s' % ArgumentParser.args.configfile
             sys.exit(-1)
 
     # execute the configure mode
+    tmpChannelFile = ArgumentParser.args.channelfile
     if ArgumentParser.args.configure:
-        for page in reversed(grabConf['page']):
-            DataStorage.channelList.update(parseChannelList(page))
+        tmpChannelList = {}
+        [ tmpChannelList.update(parseChannelList(page)) for page in reversed(grabConf['page']) ]
         try:
-            channelfile = open(ArgumentParser.args.channelfile, 'w')
-            for channelid in sorted(DataStorage.channelList.keys()):
-                channelfile.write(str(channelid) +'#'+ DataStorage.channelList[channelid] +'\n')
+            channelfile = open(tmpChannelFile, 'w')
+            tmpList = []
+            [ tmpList.append('%s#%s\n' % (channelid, tmpChannelList[channelid])) for channelid in sorted(tmpChannelList.keys()) ]
+            channelfile.write(string.joinfields(tmpList, ''))
             channelfile.close()
         except:
-            print 'error the writing channel file: ' +ArgumentParser.args.channelfile
+            print 'error the writing channel file: %s' % tmpChannelFile
             sys.exit(-1)
-        print 'channel file successfully written, file: ' +ArgumentParser.args.channelfile
+        print 'channel file successfully written, file: %s' % tmpChannelFile
         sys.exit(0)
 
     # normal grabbing workflow
     # fill the channel list
-    for line in open(ArgumentParser.args.channelfile, 'r'):
-        if line.strip() == '':
+    tmpChanList = {}
+    lstrip = string.strip
+    lsplit = string.split
+    for line in open(tmpChannelFile, 'r'):
+        if lstrip(line) == '':
             continue
         try:
-            (chanid, name) = line.split('#')
-            DataStorage.channelList[chanid] = name.strip()
+            (chanid, name) = lsplit(line, '#')
+            tmpChanList[chanid] = lstrip(name)
         except:
-            print 'error reading channel configuration, line: ' +line
+            print 'error reading channel configuration, line: %s' % line
+    DataStorage.channelList = tmpChanList
 
     # get the program data
     parseChannelData(grabConf['page'][0], ArgumentParser.args.days)
@@ -72,7 +80,6 @@ def main():
 class DataStorage():
     channelList = {}
     xmlDataFile = None
-    xmlDataBuffer = []
 
 class ArgumentParser():
     @staticmethod
@@ -104,28 +111,32 @@ class ArgumentParser():
 
 def preGrabCleanUp():
     # create the config dir if needed
-    if not os.path.isfile(ArgumentParser.args.configfile):
-        configdir = os.path.dirname(ArgumentParser.args.configfile)
+    tmpConfigFile = ArgumentParser.args.configfile
+    if not os.path.isfile(tmpConfigFile):
+        configdir = os.path.dirname(tmpConfigFile)
         if not os.path.isdir(configdir) and configdir != '':
             os.makedirs(configdir)
     # create the channel dir if needed
-    if not os.path.isfile(ArgumentParser.args.channelfile):
-        channeldir = os.path.dirname(ArgumentParser.args.channelfile)
+    tmpChannelFile = ArgumentParser.args.channelfile
+    if not os.path.isfile(tmpChannelFile):
+        channeldir = os.path.dirname(tmpChannelFile)
         if not os.path.isdir(channeldir) and channeldir != '':
             os.makedirs(channeldir)
 
-    if ArgumentParser.args.cachedir != '' and not os.path.isdir(ArgumentParser.args.cachedir):
+    tmpCacheDir = ArgumentParser.args.cachedir
+    if not os.path.isdir(tmpCacheDir) and tmpCacheDir != '':
         # create the cache dir if needed
-        os.makedirs(ArgumentParser.args.cachedir)
+        os.makedirs(tmpCacheDir)
     else:
         # cleanup the grabbed files - just the empty files
-        subprocess.call('find '+ ArgumentParser.args.cachedir +' -type f -empty -not -name ".*" -exec rm -f \'{}\' +', shell=True)
+        subprocess.call('find %s -type f -empty -not -name ".*" -exec rm -f \'{}\' +' % tmpCacheDir, shell=True)
 
 def postGrabCleanUp():
+    tmpCacheDir = ArgumentParser.args.cachedir
     # cleanup the grabbed files - just the empty files
-    subprocess.call('find '+ ArgumentParser.args.cachedir +' -type f -empty -not -name ".*" -exec rm -f \'{}\' +', shell=True)
+    subprocess.call('find %s -type f -empty -not -name ".*" -exec rm -f \'{}\' +' % tmpCacheDir, shell=True)
     # cleanup the grabbed files - files which are not used anymore
-    subprocess.call('find '+ ArgumentParser.args.cachedir +' -type f -atime +1 -not -name ".*" -exec rm -f \'{}\' +', shell=True)
+    subprocess.call('find %s -type f -atime +1 -not -name ".*" -exec rm -f \'{}\' +' % tmpCacheDir, shell=True)
 
 class AppOpener(urllib.FancyURLopener):
     user_agents = ['Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Win64; x64; Trident/5.0)',
@@ -135,7 +146,7 @@ class AppOpener(urllib.FancyURLopener):
     version = choice(user_agents)
 
 def getOverviewPage(base_url):
-    filename = ArgumentParser.args.cachedir +'/'+ (base_url.split('/')[-1]).strip() + '.html'
+    filename = '%s/%s.html' % (ArgumentParser.args.cachedir, (base_url.split('/')[-1]).strip())
     try:
         if not ArgumentParser.args.local:
             # always retrieve the overview page in none local mode
@@ -143,54 +154,53 @@ def getOverviewPage(base_url):
         if  not os.path.isfile(filename):
             raise Warning(filename)
     except:
-        print 'error retrieve / open file: ' +filename
+        print 'error retrieve / open file: %s' % filename
         return ''
     return open(filename, 'r').read().decode('utf-8')
 
 def getAdditionalPage(base_url):
-    filename = ArgumentParser.args.cachedir +'/'+ (base_url.split('/')[-1]).strip() + '.additional.html'
+    filename = '%s/%s.additional.html' % (ArgumentParser.args.cachedir, (base_url.split('/')[-1]).strip())
     try:
         if not ArgumentParser.args.local:
             # always retrieve the additional page in none local mode
-            urllib.urlretrieve(base_url + '/tvtv/index.vm?mainTemplate=web%2FadditionalChannelsSelection.vm', filename)
+            urllib.urlretrieve('%s/tvtv/index.vm?mainTemplate=web%2FadditionalChannelsSelection.vm' % base_url, filename)
         if  not os.path.isfile(filename):
             raise Warning(filename)
     except:
-        print 'error retrieve / open file: ' +filename
+        print 'error retrieve / open file: %s' % filename
         return ''
-    return open(filename, 'r').read().decode("utf-8")
+    return open(filename, 'r').read().decode('utf-8')
 
-def getDayPage(base_url, week, day, channelId):
-    print 'grabbing ' +base_url+ ' week ' +str(week)+ ' day ' +str(day)+ ' channelid ' +str(channelId)
-    if (day > -1):
+def getWeekDayPage(base_url, week, day, channelId):
+    print 'grabbing %s week %s day %s channelid %s ' % (base_url, week, day, channelId)
+    filename = '%s/week=%s-day=%s-channel=%s.html' % (ArgumentParser.args.cachedir, week, day, channelId)
+    if day > -1:
         # always retrieve the day page in none local mode
-        filename = ArgumentParser.args.cachedir +'/week='+str(week)+'-day='+str(day)+'-channel='+str(channelId)+'.html'
-        grabUrl = base_url + '/tvtv/index.vm?weekId='+str(week)+'&dayId='+str(day)+'&chnl='+str(channelId)
+        grabUrl  = '%s/tvtv/index.vm?weekId=%s&dayId=%s&chnl=%s' % (base_url, week, day, channelId)
     else:
         # use channelWeek to get the hole week for one channel
-        filename = ArgumentParser.args.cachedir +'/week='+str(week)+'-channel='+str(channelId)+'.html'
-        grabUrl = base_url + '/tvtv/index.vm?weekId='+str(week)+'&dayId=0&weekChannel='+str(channelId)
+        grabUrl  = '%s/tvtv/index.vm?weekId=%s&dayId=0&weekChannel=%s' % (base_url, week, channelId)
     try:
         if not ArgumentParser.args.local:
             urllib.urlretrieve(grabUrl, filename)
         if  not os.path.isfile(filename):
             raise Warning(filename)
     except:
-        print 'error retrieve / open file: ' +filename
+        print 'error retrieve / open file: %s' % filename
         return ''
-    return open(filename, 'r').read().decode('utf-8')
+    return filename
 
 def getProgramPage(base_url, programId):
     # use the page from cache if available
-    filename = ArgumentParser.args.cachedir +'/'+str(programId)+ '.html'
+    filename = '%s/%s.html' % (ArgumentParser.args.cachedir, programId)
     try:
         # always cached the program page if available
         if not ArgumentParser.args.local and not os.path.isfile(filename):
-            urllib.urlretrieve(base_url + '/tvtv/web/programdetails.vm?programmeId='+str(programId), filename)
+            urllib.urlretrieve('%s/tvtv/web/programdetails.vm?programmeId=%s' % (base_url, programId), filename)
         if  not os.path.isfile(filename):
             raise Warning(filename)
     except:
-        print 'error retrieve / open file: ' +filename
+        print 'error retrieve / open file: %s' % filename
         return ''
     return filename
 
@@ -198,15 +208,16 @@ def parseChannelList(pagename):
     channellist = {}
 
     # parse the main page
+
     for line in getOverviewPage(pagename).split('\n'):
         for foundId in RegExStorage.regExChannelId1.findall(line):
             for foundName in RegExStorage.regExChannelName.findall(line):
-                channellist[foundId] = foundName + ' (' + pagename + ')'
+                channellist[foundId] = '%s (%s)' % (foundName, pagename)
 
     # additional page page
     for line in getAdditionalPage(pagename).split('\n'):
         for foundId in RegExStorage.regExChannelId2.findall(line):
-            channellist[foundId] = (line.split('>')[-1]).strip() +' ('+ pagename +')'
+            channellist[foundId] = '%s (%s)' % ((line.split('>')[-1]).strip(), pagename)
 
     return channellist
 
@@ -221,6 +232,15 @@ def parseChannelData(pagename, days):
         for dayno in range(0, leftoverDaysToGrab):
             grabPlan.append([weeksToGrab, dayno])
 
+    # multiprocessing
+    pool = Pool(processes=None, initializer=initializeProcess)
+
+    resultsList = []
+    for entry in grabPlan:
+        for channelId in DataStorage.channelList.keys():
+            pageFileName = getWeekDayPage(pagename, entry[0], entry[1], channelId)
+            resultsList.append(pool.apply_async(processChannelPage, (pageFileName, )))
+
     # open the output file
     try:
         DataStorage.xmlDataFile = codecs.open(ArgumentParser.args.outputfile, 'w', 'utf-8')
@@ -229,209 +249,214 @@ def parseChannelData(pagename, days):
         sys.exit(-1)
 
     # write header
-    DataStorage.xmlDataBuffer.append('<?xml version=\'1.0\' encoding=\'UTF-8\'?>\n')
-    DataStorage.xmlDataBuffer.append('<!DOCTYPE tv SYSTEM "xmltv.dtd">\n')
-    DataStorage.xmlDataBuffer.extend(['<tv source-info-url="', pagename, '" source-info-name="tvtv" generator-info-url="http://code.google.com/p/yatvgrabber/" generator-info-name="yatvgrabber">\n'])
+    tmpData = []
+    tmpData.append('<?xml version=\'1.0\' encoding=\'UTF-8\'?>\n')
+    tmpData.append('<!DOCTYPE tv SYSTEM "xmltv.dtd">\n')
+    tmpData.append('<tv source-info-url="%s" source-info-name="tvtv" generator-info-url="http://code.google.com/p/yatvgrabber/" generator-info-name="yatvgrabber">\n' % pagename)
 
     # list the channels
-    for channelid in sorted(DataStorage.channelList.keys()):
-        DataStorage.xmlDataBuffer.extend(['  <channel id="', channelid, '">\n'])
-        DataStorage.xmlDataBuffer.extend(['    <display-name>', DataStorage.channelList[channelid].decode('latin1'), '</display-name>\n'])
-        DataStorage.xmlDataBuffer.append('  </channel>\n')
+    for channelid in DataStorage.channelList.keys():
+        tmpData.append('  <channel id="%s">\n' % channelid)
+        tmpData.append('    <display-name>%s</display-name>\n' % DataStorage.channelList[channelid].decode('latin1'))
+        tmpData.append('  </channel>\n')
+    DataStorage.xmlDataFile.write(string.joinfields(tmpData, ''))
 
-    # multiprocessing
-    pool = Pool(processes=None, initializer=initializeProcess)
+    # collect the results
+    programIdList = []
+    [ programIdList.extend(tmpResults.get(timeout=10)) for tmpResults in resultsList ]
 
-    for entry in grabPlan:
-        for channelId in DataStorage.channelList.keys():
-            channelPage = getDayPage(pagename, entry[0], entry[1], channelId)
-            for programId in RegExStorage.regExProgramId.findall(channelPage):
-                # get the program page
-                programFileName = getProgramPage(pagename, programId)
+    for programId in programIdList:
+        # get the program page
+        programFileName = getProgramPage(pagename, programId)
 
-                # pass the filename to the process for parsing
-                if programFileName != '':
-                    pool.apply_async(processProgramPage, (programId, programFileName,), callback=contentInjectCallback)
-                    #retValue = processProgramPage(programId, programFileName)
-                    #contentInjectCallback(retValue)
+        # pass the filename to the process for parsing
+        if programFileName != '':
+            pool.apply_async(processProgramPage, (programId, programFileName,), callback=contentInjectCallback)
+            #retValue = processProgramPage(programId, programFileName)
+            #contentInjectCallback(retValue)
 
     pool.close()
     pool.join()
 
-    DataStorage.xmlDataBuffer.append('</tv>\n')
-    DataStorage.xmlDataFile.write(''.join(DataStorage.xmlDataBuffer))
+    DataStorage.xmlDataFile.write('</tv>\n')
     DataStorage.xmlDataFile.close()
-    print "xmltv file successfully written, file: " +ArgumentParser.args.outputfile
+    print 'xmltv file successfully written, file: %s' % ArgumentParser.args.outputfile
+
+def processChannelPage(filename):
+    tmpData = ''
+    try:
+        tmpData = open(filename, 'r').read().decode('utf-8')
+    except:
+        return []
+    return RegExStorage.regExProgramId.findall(tmpData)
 
 def contentInjectCallback(programEntry):
 
+    llen = len
     for programid in programEntry.keys():
-        if 0 == len(programEntry[programid]):
-            print 'parsing error of programid ' +programid
+        if 0 == llen(programEntry[programid]):
+            print 'parsing error of programid %s' % programid
             continue
 
         # get the programme data
         pdata = programEntry[programid]
 
         # check min requirements
-        if not pdata.has_key('start') or not pdata.has_key('channel')  or not pdata.has_key('title'):
-            print 'minimal required data not available of programid ' +programid
+        if 'start' not in pdata or 'channel' not in pdata or 'title' not in pdata:
+            print 'minimal required data not available of programid %s' % programid
             continue
         if pdata['start'] == '' or pdata['channel'] == '' or pdata['title'] == '':
-            print 'minimal required data not available of programid ' +programid
+            print 'minimal required data not available of programid %s' % programid
             continue
 
+        tmpData = []
         # concat the programme tag
-        DataStorage.xmlDataBuffer.extend(['  <programme start="', pdata['start'], '" '])
-        if pdata.has_key('finish') and pdata['finish'] != '':
-            DataStorage.xmlDataBuffer.extend(['finish="', pdata['finish'], '" '])
-        DataStorage.xmlDataBuffer.extend(['channel="', pdata['channel'], '">\n'])
+        tmpData.append('  <programme start="%s" ' % pdata['start'])
+        if 'finish' in pdata and pdata['finish'] != '':
+            tmpData.append('finish="%s" ' % pdata['finish'])
+        tmpData.append('channel="%s">\n' % pdata['channel'])
 
         # write the title
-        if pdata.has_key('title'):
+        if 'title' in pdata:
             for tmpLang in pdata['title'].keys():
                 if pdata['title'][tmpLang] != '':
-                    DataStorage.xmlDataBuffer.extend(['    <title lang="', tmpLang, '">', pdata['title'][tmpLang], '</title>\n'])
+                    tmpData.append('    <title lang="%s">%s</title>\n' % (tmpLang, pdata['title'][tmpLang]))
         # write the sub-title
-        if pdata.has_key('sub-title'):
+        if 'sub-title' in pdata:
             for tmpLang in pdata['sub-title'].keys():
                 if pdata['sub-title'][tmpLang] != '':
-                    DataStorage.xmlDataBuffer.extend(['    <sub-title lang="', tmpLang, '">', pdata['sub-title'][tmpLang], '</sub-title>\n'])
+                    tmpData.append('    <sub-title lang="%s">%s</sub-title>\n' % (tmpLang, pdata['sub-title'][tmpLang]))
         # write the description
-        if pdata.has_key('desc'):
+        if 'desc' in pdata:
             for tmpLang in pdata['desc'].keys():
                 if pdata['desc'][tmpLang] != '':
-                    DataStorage.xmlDataBuffer.extend(['    <desc lang="', tmpLang, '">', pdata['desc'][tmpLang], '</desc>\n'])
+                    tmpData.append('    <desc lang="%s">%s</desc>\n' % (tmpLang, pdata['desc'][tmpLang]))
 
         tmpCredits = []
         # director
-        if pdata.has_key('director'):
+        if 'director' in pdata:
             for tmpDirector in pdata['director']:
                 if tmpDirector != '':
-                    tmpCredits.extend(['      <director>', tmpDirector, '</director>\n'])
+                    tmpCredits.append('      <director>%s</director>\n' % tmpDirector)
         # actors
-        if pdata.has_key('actor'):
+        if 'actor' in pdata:
             for tmpActorData in pdata['actor']:
                 for tmpActor in tmpActorData.keys():
                     if tmpActor != '':
                         if tmpActorData[tmpActor] == '':
-                            tmpCredits.extend(['      <actor>', tmpActor, '</actor>\n'])
+                            tmpCredits.append('      <actor>%s</actor>\n' % tmpActor)
                         else:
-                            tmpCredits.extend(['      <actor role="', tmpActorData[tmpActor], '">', tmpActor, '</actor>\n'])
+                            tmpCredits.append('      <actor role="%s">%s</actor>\n' % (tmpActorData[tmpActor], tmpActor))
         # writer
-        if pdata.has_key('writer'):
+        if 'writer' in pdata:
             for tmpWriter in pdata['writer']:
                 if tmpWriter != '':
-                    tmpCredits.extend(['      <writer>', tmpWriter, '</writer>\n'])
+                    tmpCredits.append('      <writer>%s</writer>\n' % tmpWriter)
         # adapter
-        if pdata.has_key('adapter'):
+        if 'adapter' in pdata:
             for tmpAdapter in pdata['adapter']:
                 if tmpAdapter != '':
-                    tmpCredits.extend(['      <adapter>', tmpAdapter, '</adapter>\n'])
+                    tmpCredits.append('      <adapter>%s</adapter>\n' % tmpAdapter)
         # producer
-        if pdata.has_key('producer'):
+        if 'producer' in pdata:
             for tmpProducer in pdata['producer']:
                 if tmpProducer != '':
-                    tmpCredits.extend(['      <producer>', tmpProducer, '</producer>\n'])
+                    tmpCredits.append('      <producer>%s</producer>\n' % tmpProducer)
         # composer
-        if pdata.has_key('composer'):
+        if 'composer' in pdata:
             for tmpComposer in pdata['composer']:
                 if tmpComposer != '':
-                    tmpCredits.extend(['      <composer>', tmpComposer, '</composer>\n'])
+                    tmpCredits.append('      <composer>%s</composer>\n' % tmpComposer)
         # editor
-        if pdata.has_key('editor'):
+        if 'editor' in pdata:
             for tmpEditor in pdata['editor']:
                 if tmpEditor != '':
-                    tmpCredits.extend(['      <editor>', tmpEditor, '</editor>\n'])
+                    tmpCredits.append('      <editor>%s</editor>\n' % tmpEditor)
         # presenter
-        if pdata.has_key('presenter'):
+        if 'presenter' in pdata:
             for tmpPresenter in pdata['presenter']:
                 if tmpPresenter != '':
-                    tmpCredits.extend(['      <presenter>', tmpPresenter, '</presenter>\n'])
+                    tmpCredits.append('      <presenter>%s</presenter>\n' % tmpPresenter)
         # commentator
-        if pdata.has_key('commentator'):
+        if 'commentator' in pdata:
             for tmpCommentator in pdata['commentator']:
                 if tmpCommentator != '':
-                    tmpCredits.extend(['      <commentator>', tmpCommentator, '</commentator>\n'])
+                    tmpCredits.append('      <commentator>%s</commentator>\n' % tmpCommentator)
         # guest
-        if pdata.has_key('guest'):
+        if 'guest' in pdata:
             for tmpGuest in pdata['guest']:
                 if tmpGuest != '':
-                    tmpCredits.extend(['      <guest>', tmpGuest, '</guest>\n'])
+                    tmpCredits.append('      <guest>%s</guest>\n' % tmpGuest)
 
         # write the credits
-        if len(tmpCredits) > 0:
-            DataStorage.xmlDataBuffer.append('    <credits>\n')
-            DataStorage.xmlDataBuffer.extend(tmpCredits)
-            DataStorage.xmlDataBuffer.append('    </credits>\n')
+        if llen(tmpCredits) > 0:
+            tmpData.append('    <credits>\n')
+            tmpData.extend(tmpCredits)
+            tmpData.append('    </credits>\n')
 
         # production date
-        if pdata.has_key('date') and pdata['date'] != '':
-            DataStorage.xmlDataBuffer.extend(['    <date>', pdata['date'], '</date>\n'])
+        if 'date' in pdata and pdata['date'] != '':
+            tmpData.append('    <date>%s</date>\n' % pdata['date'])
 
         # category
-        if pdata.has_key('category'):
+        if 'category' in pdata:
             for tmpLang in pdata['category']:
                 for tmpCategory in pdata['category'][tmpLang]:
                     if tmpCategory != '':
-                        DataStorage.xmlDataBuffer.extend(['    <category lang="', tmpLang, '">', tmpCategory, '</category>\n'])
+                        tmpData.append('    <category lang="%s">%s</category>\n' % (tmpLang, tmpCategory))
         # language
-        if pdata.has_key('language'):
+        if 'language' in pdata:
             for tmpLang in pdata['language']:
                 for tmpLanguage in pdata['language'][tmpLang]:
                     if tmpLanguage != '':
-                        DataStorage.xmlDataBuffer.extend(['    <language lang="', tmpLang, '">', tmpLanguage, '</language>\n'])
+                        tmpData.append('    <language lang="%s">%s</language>\n' % (tmpLang, tmpLanguage))
         # orig-language
-        if pdata.has_key('orig-language'):
+        if 'orig-language' in pdata:
             for tmpLang in pdata['orig-language']:
                 for tmpOrigLanguage in pdata['orig-language'][tmpLang]:
                     if tmpOrigLanguage != '':
-                        DataStorage.xmlDataBuffer.extend(['    <orig-language lang="', tmpLang, '">', tmpOrigLanguage, '</orig-language>\n'])
+                        tmpData.append('    <orig-language lang="%s">%s</orig-language>\n' % (tmpLang, tmpOrigLanguage))
         # length
-        if pdata.has_key('length'):
+        if 'length' in pdata:
             for tmpUnits in pdata['length']:
                 for tmpValue in pdata['length'][tmpUnits]:
                     if tmpValue != '':
-                        DataStorage.xmlDataBuffer.extend(['    <length units="', tmpUnits, '">', tmpValue, '</length>\n'])
+                        tmpData.append('    <length units="%s">%s</length>\n' % (tmpUnits, tmpValue))
         # icon
-        if pdata.has_key('icon') and len(pdata['icon']) > 0:
+        if 'icon' in pdata and llen(pdata['icon']) > 0:
             tmpIcon = []
-            if pdata['icon'].has_key('src') and pdata['icon']['src'] != '':
-                tmpIcon = ['    <icon src="', pdata['icon']['src'], '"']
-                if pdata['icon'].has_key('width') and pdata['icon']['width'] != '':
-                    tmpIcon.extend([' width="', pdata['icon']['width'], '"'])
-                if pdata['icon'].has_key('height') and pdata['icon']['height'] != '':
-                    tmpIcon.extend([' height="', pdata['icon']['height'], '"'])
-                tmpIcon.append(' />')
-            if len(tmpIcon) > 0:
-                DataStorage.xmlDataBuffer.extend(tmpIcon)
+            if 'src' in pdata['icon'] and pdata['icon']['src'] != '':
+                tmpIcon = ['    <icon src="%s"' % pdata['icon']['src']]
+                if 'width' in pdata['icon'] and pdata['icon']['width'] != '':
+                    tmpIcon.append(' width="%s"' % pdata['icon']['width'])
+                if 'height' in pdata['icon'] and pdata['icon']['height'] != '':
+                    tmpIcon.append(' height="%s"' % pdata['icon']['height'])
+                tmpIcon.append(' />\n')
+            if llen(tmpIcon) > 0:
+                tmpData.extend(tmpIcon)
         # country
-        if pdata.has_key('country'):
+        if 'country' in pdata:
             for tmpLang in pdata['country']:
                 for tmpCountry in pdata['country'][tmpLang]:
                     if tmpCountry != '':
-                        DataStorage.xmlDataBuffer.extend(['    <country lang="', tmpLang, '">', tmpCountry, '</country>\n'])
+                        tmpData.append('    <country lang="%s">%s</country>\n' % (tmpLang, tmpCountry))
 
         # episode numbers
-        if pdata.has_key('episode-num'):
+        if 'episode-num' in pdata:
             for tmpSystem in pdata['episode-num']:
                 if pdata['episode-num'][tmpSystem] != '':
-                    DataStorage.xmlDataBuffer.extend(['    <episode-num system="', tmpSystem, '">', pdata['episode-num'][tmpSystem], '</episode-num>\n'])
+                    tmpData.append('    <episode-num system="%s">%s</episode-num>\n' % (tmpSystem, pdata['episode-num'][tmpSystem]))
         # regExRating
-        if pdata.has_key('rating'):
+        if 'rating' in pdata:
             for tmpSystem in pdata['rating']:
                 if pdata['rating'][tmpSystem] != '':
-                    DataStorage.xmlDataBuffer.extend(['    <regExRating system="', tmpSystem, '">'])
-                    DataStorage.xmlDataBuffer.extend(['      <value>', pdata['rating'][tmpSystem], '</value>\n'])
-                    DataStorage.xmlDataBuffer.append('    </regExRating>\n')
+                    tmpData.append('    <regExRating system="%s">\n' % tmpSystem)
+                    tmpData.append('      <value>%s</value>\n' % pdata['rating'][tmpSystem])
+                    tmpData.append('    </regExRating>\n')
 
         # end programme tag
-        DataStorage.xmlDataBuffer.append('  </programme>\n')
-
-        # chunk write the collected programme
-        if len(DataStorage.xmlDataBuffer) > 200:
-            DataStorage.xmlDataFile.write(''.join(DataStorage.xmlDataBuffer))
-            DataStorage.xmlDataBuffer = []
+        tmpData.append('  </programme>\n')
+        DataStorage.xmlDataFile.write(string.joinfields(tmpData, ''))
 
 def initializeProcess():
     # ignore sig int so the main process can be interrupted
@@ -506,15 +531,15 @@ def processProgramPage(programId, filename):
     # original title
     for foundStr in RegExStorage.regExOrgTitle.findall(programPage):
         tmpTitle = { 'de': CleanFromTags(foundStr) }
-        if programData[programId].has_key('title') and programData[programId]['title']['de'] != '':
+        if 'title' in programData[programId] and programData[programId]['title']['de'] != '':
             if tmpTitle['de'] in programData[programId]['title']['de']:
                 # org tile found, just use the title
                 tmpTitle['de'] = programData[programId]['title']['de']
             else:
                 # org title in title not found - concat the titles
-                tmpTitle['de'] += " - "+ programData[programId]['title']['de']
+                tmpTitle['de'] = "%s - %s" % (tmpTitle['de'], programData[programId]['title']['de'])
         programData[programId]['title'] = tmpTitle
-    if not programData[programId].has_key('title') or programData[programId]['title']['de'] == '':
+    if 'title' not in programData[programId] or programData[programId]['title']['de'] == '':
         os.remove(filename)
         return { programId: {} }
 
@@ -536,7 +561,7 @@ def processProgramPage(programId, filename):
         programData[programId]['actor'] = []
         for tmpActor in CleanFromTags(foundStr).split(','):
             try:
-                (fActor, fRole) = tmpActor.strip().split('(')
+                (fActor, fRole) = tmpActor.strip().split('(', 1)
                 programData[programId]['actor'].append({fActor.strip(): fRole.strip(') ')})
             except:
                 programData[programId]['actor'].append({tmpActor.strip(): ''})
@@ -568,19 +593,19 @@ def processProgramPage(programId, filename):
     # episode in format xmltv_ns
     episodeString = ''
     for foundStr in RegExStorage.regExEpisode.findall(programPage):
-        episodeString = episodeString +' '+ foundStr.strip()
+        episodeString = '%s %s' % (episodeString, foundStr.strip())
     episodeString = episodeString.strip()
     if episodeString != '':
         tempstr = ''
         for tmpSeason in RegExStorage.regExSeason.findall(episodeString):
             tempstr = str(int(tmpSeason) - 1)
-        tempstr += '.'
+        tempstr = '%s.' % tempstr
         for tmpEpisode in RegExStorage.regExEpisodeNum.findall(episodeString):
-            tempstr += str(int(tmpEpisode) - 1)
+            tempstr = '%s%s' % (tempstr, int(tmpEpisode) - 1)
             for tmpEpisodeTotal in RegExStorage.regExEpisodeTotal.findall(episodeString):
-                tempstr +='/' + tmpEpisodeTotal
+                tempstr ='%s/%s' % (tempstr, tmpEpisodeTotal)
         if tempstr != ".":
-            programData[programId]['episode-num'] = {'xmltv_ns': tempstr + '.' }
+            programData[programId]['episode-num'] = {'xmltv_ns': '%s.' % tempstr }
     # kid protection
     for foundStr in RegExStorage.regExRating.findall(programPage):
         programData[programId]['rating'] = { 'FSK': CleanFromTags(foundStr) }
@@ -589,7 +614,7 @@ def processProgramPage(programId, filename):
 
 class RegExStorage():
     # for the configuration workflow
-    regExChannelId1 = re.compile(r'weekChannel=([0-9]+)')
+    regExChannelId1 = re.compile(r'weekChannel=([0-9]+)"')
     regExChannelName = re.compile(r'class="">(.*)<')
     regExChannelId2 = re.compile(r'channelLogo=([0-9]+)"')
 
@@ -632,7 +657,8 @@ def CleanFromTags(inputStr):
 
     retStr = inputStr
     for key in sorted(RegExStorage.charSpecial.keys()):
-        retStr = RegExStorage.charSpecial[key][0].sub(RegExStorage.charSpecial[key][1], retStr)   # clean all special characters
+        # clean all special characters
+        retStr = RegExStorage.charSpecial[key][0].sub(RegExStorage.charSpecial[key][1], retStr)
 
     return retStr.strip()
 
