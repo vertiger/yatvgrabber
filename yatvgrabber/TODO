@@ -8,3 +8,4 @@ python rewrite of the grabber script
 - update only mode
 - grab selective date
 - use vim instead of gedit
+- grab channel icons (and set the names in the xmltv file)
