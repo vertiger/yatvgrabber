@@ -72,6 +72,7 @@ def main():
 class DataStorage():
     channelList = {}
     xmlDataFile = None
+    xmlDataBuffer = []
 
 class ArgumentParser():
     @staticmethod
@@ -226,20 +227,17 @@ def parseChannelData(pagename, days):
     except:
         print 'error open outputfile, file: ' +ArgumentParser.args.outputfile
         sys.exit(-1)
-    dataBuffer = []
 
     # write header
-    dataBuffer.append('<?xml version=\'1.0\' encoding=\'UTF-8\'?>\n')
-    dataBuffer.append('<!DOCTYPE tv SYSTEM "xmltv.dtd">\n')
-    dataBuffer.extend(['<tv source-info-url="', pagename, '" source-info-name="tvtv" generator-info-url="http://code.google.com/p/yatvgrabber/" generator-info-name="yatvgrabber">\n'])
+    DataStorage.xmlDataBuffer.append('<?xml version=\'1.0\' encoding=\'UTF-8\'?>\n')
+    DataStorage.xmlDataBuffer.append('<!DOCTYPE tv SYSTEM "xmltv.dtd">\n')
+    DataStorage.xmlDataBuffer.extend(['<tv source-info-url="', pagename, '" source-info-name="tvtv" generator-info-url="http://code.google.com/p/yatvgrabber/" generator-info-name="yatvgrabber">\n'])
 
     # list the channels
     for channelid in sorted(DataStorage.channelList.keys()):
-        dataBuffer.extend(['  <channel id="', channelid, '">\n'])
-        dataBuffer.extend(['    <display-name>', DataStorage.channelList[channelid].decode('latin1'), '</display-name>\n'])
-        dataBuffer.append('  </channel>\n')
-    DataStorage.xmlDataFile.write(''.join(dataBuffer))
-    dataBuffer = []
+        DataStorage.xmlDataBuffer.extend(['  <channel id="', channelid, '">\n'])
+        DataStorage.xmlDataBuffer.extend(['    <display-name>', DataStorage.channelList[channelid].decode('latin1'), '</display-name>\n'])
+        DataStorage.xmlDataBuffer.append('  </channel>\n')
 
     # multiprocessing
     pool = Pool(processes=None, initializer=initializeProcess)
@@ -260,13 +258,13 @@ def parseChannelData(pagename, days):
     pool.close()
     pool.join()
 
-    DataStorage.xmlDataFile.write('</tv>\n')
+    DataStorage.xmlDataBuffer.append('</tv>\n')
+    DataStorage.xmlDataFile.write(''.join(DataStorage.xmlDataBuffer))
     DataStorage.xmlDataFile.close()
     print "xmltv file successfully written, file: " +ArgumentParser.args.outputfile
 
 def contentInjectCallback(programEntry):
 
-    dataBuffer = []
     for programid in programEntry.keys():
         if 0 == len(programEntry[programid]):
             print 'parsing error of programid ' +programid
@@ -284,26 +282,26 @@ def contentInjectCallback(programEntry):
             continue
 
         # concat the programme tag
-        dataBuffer.extend(['  <programme start="', pdata['start'], '" '])
+        DataStorage.xmlDataBuffer.extend(['  <programme start="', pdata['start'], '" '])
         if pdata.has_key('finish') and pdata['finish'] != '':
-            dataBuffer.extend(['finish="', pdata['finish'], '" '])
-        dataBuffer.extend(['channel="', pdata['channel'], '">\n'])
+            DataStorage.xmlDataBuffer.extend(['finish="', pdata['finish'], '" '])
+        DataStorage.xmlDataBuffer.extend(['channel="', pdata['channel'], '">\n'])
 
         # write the title
         if pdata.has_key('title'):
             for tmpLang in pdata['title'].keys():
                 if pdata['title'][tmpLang] != '':
-                    dataBuffer.extend(['    <title lang="', tmpLang, '">', pdata['title'][tmpLang], '</title>\n'])
+                    DataStorage.xmlDataBuffer.extend(['    <title lang="', tmpLang, '">', pdata['title'][tmpLang], '</title>\n'])
         # write the sub-title
         if pdata.has_key('sub-title'):
             for tmpLang in pdata['sub-title'].keys():
                 if pdata['sub-title'][tmpLang] != '':
-                    dataBuffer.extend(['    <sub-title lang="', tmpLang, '">', pdata['sub-title'][tmpLang], '</sub-title>\n'])
+                    DataStorage.xmlDataBuffer.extend(['    <sub-title lang="', tmpLang, '">', pdata['sub-title'][tmpLang], '</sub-title>\n'])
         # write the description
         if pdata.has_key('desc'):
             for tmpLang in pdata['desc'].keys():
                 if pdata['desc'][tmpLang] != '':
-                    dataBuffer.extend(['    <desc lang="', tmpLang, '">', pdata['desc'][tmpLang], '</desc>\n'])
+                    DataStorage.xmlDataBuffer.extend(['    <desc lang="', tmpLang, '">', pdata['desc'][tmpLang], '</desc>\n'])
 
         tmpCredits = []
         # director
@@ -363,38 +361,38 @@ def contentInjectCallback(programEntry):
 
         # write the credits
         if len(tmpCredits) > 0:
-            dataBuffer.append('    <credits>\n')
-            dataBuffer.extend(tmpCredits)
-            dataBuffer.append('    </credits>\n')
+            DataStorage.xmlDataBuffer.append('    <credits>\n')
+            DataStorage.xmlDataBuffer.extend(tmpCredits)
+            DataStorage.xmlDataBuffer.append('    </credits>\n')
 
         # production date
         if pdata.has_key('date') and pdata['date'] != '':
-            dataBuffer.extend(['    <date>', pdata['date'], '</date>\n'])
+            DataStorage.xmlDataBuffer.extend(['    <date>', pdata['date'], '</date>\n'])
 
         # category
         if pdata.has_key('category'):
             for tmpLang in pdata['category']:
                 for tmpCategory in pdata['category'][tmpLang]:
                     if tmpCategory != '':
-                        dataBuffer.extend(['    <category lang="', tmpLang, '">', tmpCategory, '</category>\n'])
+                        DataStorage.xmlDataBuffer.extend(['    <category lang="', tmpLang, '">', tmpCategory, '</category>\n'])
         # language
         if pdata.has_key('language'):
             for tmpLang in pdata['language']:
                 for tmpLanguage in pdata['language'][tmpLang]:
                     if tmpLanguage != '':
-                        dataBuffer.extend(['    <language lang="', tmpLang, '">', tmpLanguage, '</language>\n'])
+                        DataStorage.xmlDataBuffer.extend(['    <language lang="', tmpLang, '">', tmpLanguage, '</language>\n'])
         # orig-language
         if pdata.has_key('orig-language'):
             for tmpLang in pdata['orig-language']:
                 for tmpOrigLanguage in pdata['orig-language'][tmpLang]:
                     if tmpOrigLanguage != '':
-                        dataBuffer.extend(['    <orig-language lang="', tmpLang, '">', tmpOrigLanguage, '</orig-language>\n'])
+                        DataStorage.xmlDataBuffer.extend(['    <orig-language lang="', tmpLang, '">', tmpOrigLanguage, '</orig-language>\n'])
         # length
         if pdata.has_key('length'):
             for tmpUnits in pdata['length']:
                 for tmpValue in pdata['length'][tmpUnits]:
                     if tmpValue != '':
-                        dataBuffer.extend(['    <length units="', tmpUnits, '">', tmpValue, '</length>\n'])
+                        DataStorage.xmlDataBuffer.extend(['    <length units="', tmpUnits, '">', tmpValue, '</length>\n'])
         # icon
         if pdata.has_key('icon') and len(pdata['icon']) > 0:
             tmpIcon = []
@@ -404,35 +402,36 @@ def contentInjectCallback(programEntry):
                     tmpIcon.extend([' width="', pdata['icon']['width'], '"'])
                 if pdata['icon'].has_key('height') and pdata['icon']['height'] != '':
                     tmpIcon.extend([' height="', pdata['icon']['height'], '"'])
-            if len(tmpIcon) > 0:
                 tmpIcon.append(' />')
-                dataBuffer.extend(tmpIcon)
+            if len(tmpIcon) > 0:
+                DataStorage.xmlDataBuffer.extend(tmpIcon)
         # country
         if pdata.has_key('country'):
             for tmpLang in pdata['country']:
                 for tmpCountry in pdata['country'][tmpLang]:
                     if tmpCountry != '':
-                        dataBuffer.extend(['    <country lang="', tmpLang, '">', tmpCountry, '</country>\n'])
+                        DataStorage.xmlDataBuffer.extend(['    <country lang="', tmpLang, '">', tmpCountry, '</country>\n'])
 
         # episode numbers
         if pdata.has_key('episode-num'):
             for tmpSystem in pdata['episode-num']:
                 if pdata['episode-num'][tmpSystem] != '':
-                    dataBuffer.extend(['    <episode-num system="', tmpSystem, '">', pdata['episode-num'][tmpSystem], '</episode-num>\n'])
+                    DataStorage.xmlDataBuffer.extend(['    <episode-num system="', tmpSystem, '">', pdata['episode-num'][tmpSystem], '</episode-num>\n'])
         # regExRating
         if pdata.has_key('rating'):
             for tmpSystem in pdata['rating']:
                 if pdata['rating'][tmpSystem] != '':
-                    dataBuffer.extend(['    <regExRating system="', tmpSystem, '">'])
-                    dataBuffer.extend(['      <value>', pdata['rating'][tmpSystem], '</value>\n'])
-                    dataBuffer.append('    </regExRating>\n')
+                    DataStorage.xmlDataBuffer.extend(['    <regExRating system="', tmpSystem, '">'])
+                    DataStorage.xmlDataBuffer.extend(['      <value>', pdata['rating'][tmpSystem], '</value>\n'])
+                    DataStorage.xmlDataBuffer.append('    </regExRating>\n')
 
         # end programme tag
-        dataBuffer.append('  </programme>\n')
+        DataStorage.xmlDataBuffer.append('  </programme>\n')
 
-    # write all collected programme
-    if len(dataBuffer) > 0:
-        DataStorage.xmlDataFile.write(''.join(dataBuffer))
+        # chunk write the collected programme
+        if len(DataStorage.xmlDataBuffer) > 200:
+            DataStorage.xmlDataFile.write(''.join(DataStorage.xmlDataBuffer))
+            DataStorage.xmlDataBuffer = []
 
 def initializeProcess():
     # ignore sig int so the main process can be interrupted
