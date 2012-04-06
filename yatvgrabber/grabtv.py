@@ -164,7 +164,7 @@ def getAdditionalPage(base_url):
         if not ArgumentParser.args.local:
             # always retrieve the additional page in none local mode
             urllib.urlretrieve('%s/tvtv/index.vm?mainTemplate=web%2FadditionalChannelsSelection.vm' % base_url, filename)
-        if  not os.path.isfile(filename):
+        if not os.path.isfile(filename):
             raise Warning(filename)
     except:
         print 'error retrieve / open file: %s' % filename
@@ -183,7 +183,7 @@ def getWeekDayPage(base_url, week, day, channelId):
     try:
         if not ArgumentParser.args.local:
             urllib.urlretrieve(grabUrl, filename)
-        if  not os.path.isfile(filename):
+        if not os.path.isfile(filename):
             raise Warning(filename)
     except:
         print 'error retrieve / open file: %s' % filename
@@ -197,7 +197,7 @@ def getProgramPage(base_url, programId):
         # always cached the program page if available
         if not ArgumentParser.args.local and not os.path.isfile(filename):
             urllib.urlretrieve('%s/tvtv/web/programdetails.vm?programmeId=%s' % (base_url, programId), filename)
-        if  not os.path.isfile(filename):
+        if not os.path.isfile(filename):
             raise Warning(filename)
     except:
         print 'error retrieve / open file: %s' % filename
@@ -208,7 +208,6 @@ def parseChannelList(pagename):
     channellist = {}
 
     # parse the main page
-
     for line in getOverviewPage(pagename).split('\n'):
         for foundId in RegExStorage.regExChannelId1.findall(line):
             for foundName in RegExStorage.regExChannelName.findall(line):
@@ -265,8 +264,18 @@ def parseChannelData(pagename, days):
     programIdList = []
     [ programIdList.extend(tmpResults.get(timeout=10)) for tmpResults in resultsList ]
 
+    #program page getting loop
+    totalProgrammeIds = len(programIdList)
+    tmpTime1 = datetime.datetime(2012, 1, 1)
     for programId in programIdList:
+        #debug output
+        tmpTime2 = datetime.datetime.today()
+        if (tmpTime2 > (tmpTime1 + datetime.timedelta(minutes=5))):
+            print "[%s] progress: still %s of %s program pages to get" % (tmpTime2.strftime('%Y-%m-%d %H:%M:%S'), len(programIdList), totalProgrammeIds)
+            tmpTime1 = tmpTime2
+
         # get the program page
+        programIdList.remove(programId)
         programFileName = getProgramPage(pagename, programId)
 
         # pass the filename to the process for parsing
