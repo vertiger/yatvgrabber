@@ -151,7 +151,7 @@ def getOverviewPage(base_url):
         if not ArgumentParser.args.local:
             # always retrieve the overview page in none local mode
             urllib.urlretrieve(base_url, filename)
-        if  not os.path.isfile(filename):
+        if not os.path.isfile(filename):
             raise Warning(filename)
     except:
         print 'error retrieve / open file: %s' % filename
@@ -266,16 +266,16 @@ def parseChannelData(pagename, days):
 
     #program page getting loop
     totalProgrammeIds = len(programIdList)
+    stepProgrammeIds = 0
     tmpTime1 = datetime.datetime(2012, 1, 1)
     for programId in programIdList:
         #debug output
         tmpTime2 = datetime.datetime.today()
         if (tmpTime2 > (tmpTime1 + datetime.timedelta(minutes=5))):
-            print "[%s] progress: still %s of %s program pages to get" % (tmpTime2.strftime('%Y-%m-%d %H:%M:%S'), len(programIdList), totalProgrammeIds)
+            print "[%s] progress: %s of %s program pages" % (tmpTime2.strftime('%Y-%m-%d %H:%M:%S'), stepProgrammeIds, totalProgrammeIds)
             tmpTime1 = tmpTime2
 
         # get the program page
-        programIdList.remove(programId)
         programFileName = getProgramPage(pagename, programId)
 
         # pass the filename to the process for parsing
@@ -283,6 +283,7 @@ def parseChannelData(pagename, days):
             pool.apply_async(processProgramPage, (programId, programFileName,), callback=contentInjectCallback)
             #retValue = processProgramPage(programId, programFileName)
             #contentInjectCallback(retValue)
+        stepProgrammeIds += 1
 
     pool.close()
     pool.join()
