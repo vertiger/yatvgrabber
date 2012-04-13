@@ -47,7 +47,7 @@ def main():
         tmpChannelList = {}
         [ tmpChannelList.update(parseChannelList(page)) for page in reversed(grabConf['page']) ]
         try:
-            channelfile = open(tmpChannelFile, 'w')
+            channelfile = codecs.open(tmpChannelFile, 'w', 'utf-8')
             tmpList = []
             [ tmpList.append('%s#%s\n' % (channelid, tmpChannelList[channelid])) for channelid in sorted(tmpChannelList.keys()) ]
             channelfile.write(string.joinfields(tmpList, ''))
