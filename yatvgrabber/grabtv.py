@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+# standart libraries
 import os
 import re
 import sys
@@ -9,12 +10,14 @@ import signal
 import string
 import urllib
 #import logging
-import argparse
 import datetime
 import subprocess
 from random import choice
-from configobj import ConfigObj
 from multiprocessing import Pool
+
+# third party libraries
+import argparse
+from configobj import ConfigObj
 
 def main():
     # argument parsing
@@ -163,7 +166,7 @@ def getAdditionalPage(base_url):
     try:
         if not ArgumentParser.args.local:
             # always retrieve the additional page in none local mode
-            urllib.urlretrieve('%s/tvtv/index.vm?mainTemplate=web%2FadditionalChannelsSelection.vm' % base_url, filename)
+            urllib.urlretrieve('%s/tvtv/index.vm?mainTemplate=web%%2FadditionalChannelsSelection.vm' % base_url, filename)
         if not os.path.isfile(filename):
             raise Warning(filename)
     except:
