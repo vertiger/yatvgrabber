@@ -1,14 +1,19 @@
 #! /usr/bin/env python
 
-import argparse
+# standart libraries
 import os
 import sys
 import shutil
 import _mysql
+from operator import itemgetter
+
+# third party libraries
+import argparse
 from configobj import ConfigObj
 from PyQt4.QtGui import QDialog, QApplication, QStandardItem, QStandardItemModel, QItemSelectionModel, QMessageBox
+
+# own libraries
 from configuratorgui import Ui_Dialog
-from operator import itemgetter
 
 class MainDialog(QDialog):
     def __init__(self):
