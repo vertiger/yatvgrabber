@@ -760,7 +760,10 @@ class RegExStorage():
                    4: [re.compile(r'^Reihe: .+'), r''],
                    5: [re.compile(r'&'), r'&amp;'],
                    6: [re.compile(r'"'), r'&quot;'],
-                   97: [re.compile(r'c\<t'), r'c\'t'],
+                   7: [re.compile(r'\''), r'&apos;'],
+                   95: [re.compile(r'c\<t'), r'c\'t'],
+                   96: [re.compile(r'<'), r'&lt;'],
+                   97: [re.compile(r'>'), r'&gt;'],
                    98: [re.compile(r'[\n\t ]+', re.DOTALL), r' '],
                    99: [re.compile(r',$'), r'']}
 
