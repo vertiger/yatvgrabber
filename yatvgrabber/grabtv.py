@@ -389,7 +389,7 @@ def contentInjectCallback(programEntry):
         # concat the programme tag
         tmpData.append('  <programme start="%s" ' % pdata['start'])
         if 'finish' in pdata and pdata['finish'] != '':
-            tmpData.append('finish="%s" ' % pdata['finish'])
+            tmpData.append('stop="%s" ' % pdata['finish'])
         tmpData.append('channel="%s">\n' % pdata['channel'])
 
         # write the title
@@ -618,7 +618,7 @@ def processProgramPage(programId, filename):
             (starthour, startminute) = foundStr.strip().split(':')
             startdate = datetime.datetime(int(year), int(month), int(day),
                                           int(starthour), int(startminute))
-            programData[programId]['start'] = startdate.strftime('%Y%m%d%H%M')
+            programData[programId]['start'] = startdate.strftime('%Y%m%d%H%M%S')
         except:
             os.remove(filename)
             return {programId: {}}
@@ -630,8 +630,8 @@ def processProgramPage(programId, filename):
                                         int(endhour), int(endminute))
             if startdate > enddate:
                 # program ends next day
-                enddate = enddate + datetime.timedelta(days=1)
-            programData[programId]['finish'] = enddate.strftime('%Y%m%d%H%M')
+                enddate = enddate + datetime.timedelta(days = 1)
+            programData[programId]['finish'] = enddate.strftime('%Y%m%d%H%M%S')
         except:
             pass  # optional data
 
@@ -700,12 +700,13 @@ def processProgramPage(programId, filename):
         programData[programId]['country'] = {'de': []}
         for tmpCountry in CleanFromTags(foundStr).split(','):
             programData[programId]['country']['de'].append(tmpCountry.strip())
-    # episode in format xmltv_ns
+    # episode
     episodeString = ''
     for foundStr in RegExStorage.regExEpisode.findall(programPage):
         episodeString = '%s %s' % (episodeString, foundStr.strip())
     episodeString = episodeString.strip()
     if episodeString != '':
+        # episode in format xmltv_ns
         tempstr = ''
         for tmpSeason in RegExStorage.regExSeason.findall(episodeString):
             tempstr = str(int(tmpSeason) - 1)
@@ -716,6 +717,14 @@ def processProgramPage(programId, filename):
                 tempstr = '%s/%s' % (tempstr, tmpEpisodeTotal)
         if tempstr != ".":
             programData[programId]['episode-num'] = {'xmltv_ns': '%s.' % tempstr}
+        # episode in format onscreen
+        tempstr = ''
+        for tmpSeason in RegExStorage.regExSeason.findall(episodeString):
+            tempstr = "S%02d" % int(tmpSeason)
+        for tmpEpisode in RegExStorage.regExEpisodeNum.findall(episodeString):
+            tempstr = '%sE%02d' % (tempstr, int(tmpEpisode))
+        if tempstr != "":
+            programData[programId]['episode-num']['onscreen'] = tempstr
     # kid protection
     for foundStr in RegExStorage.regExRating.findall(programPage):
         programData[programId]['rating'] = {'FSK': CleanFromTags(foundStr)}
