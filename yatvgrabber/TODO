@@ -1,9 +1,1 @@
 TODO
-
-python rewrite of the grabber script
-- parsing keywords needs to be adapted per main base page (language specific), external RegEx module
-- daemonize
-- lazy load (timing parameter)
-- update only mode
-- grab selective date
-- grab channel icons (and set the names in the xmltv file)

@@ -21,10 +21,29 @@ from configobj import ConfigObj
 
 
 def main():
+
+    lockfile = "/var/lock/grabtv.py.lock"
+    if os.access(lockfile, os.F_OK):
+        pidfile = open(lockfile, "r")
+        pidfile.seek(0)
+        old_pd = pidfile.readline()
+        # Now we check the PID from lock file matches to the current
+        # process PID
+        if os.path.exists("/proc/%s" % old_pd):
+                print "error, already running with pid %s," % old_pd
+                sys.exit(-1)
+        else:
+                os.remove(lockfile)
+
+    #This is part of code where we put a PID file in the lock file
+    pidfile = open(lockfile, "w")
+    pidfile.write("%s" % os.getpid())
+    pidfile.close
+
     # argument parsing
     ArgumentParser.parseArguments()
 
-    # override the urllib useragent - to get the custom user agent
+    # override the urllib useragent - to use the custom user agent
     urllib._urlopener = AppOpener()
 
     # run the pre grab step
@@ -32,7 +51,7 @@ def main():
 
     # read / set the grabber configuration file
     tmpConfigFile = ArgumentParser.args.configfile
-    grabConf = ConfigObj(tmpConfigFile, raise_errors=True)
+    grabConf = ConfigObj(tmpConfigFile, raise_errors = True)
     if not os.path.isfile(tmpConfigFile):
         # write the default configuration
         grabConf['page'] = ['http://www.tvtv.ch',
@@ -46,6 +65,7 @@ def main():
         except:
             print 'unable the write config file: %s' % \
                   ArgumentParser.args.configfile
+            os.remove(lockfile)
             sys.exit(-1)
 
     # execute the configure mode
@@ -63,8 +83,10 @@ def main():
             channelfile.close()
         except:
             print 'error the writing channel file: %s' % tmpChannelFile
+            os.remove(lockfile)
             sys.exit(-1)
         print 'channel file successfully written, file: %s' % tmpChannelFile
+        os.remove(lockfile)
         sys.exit(0)
 
     # normal grabbing workflow
@@ -89,6 +111,10 @@ def main():
     if not ArgumentParser.args.local:
         postGrabCleanUp()
 
+    #normal exit
+    os.remove(lockfile)
+    sys.exit(0)
+
 
 class DataStorage():
     channelList = {}
@@ -99,31 +125,31 @@ class ArgumentParser():
     @staticmethod
     def parseArguments():
         parser = argparse.ArgumentParser(
-                    description='YaTvGrabber, XMLTV grabbing script',
-                    epilog='Copyright (C) [2012] [keller.eric, lars.schmohl]',
-                    formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-        parser.add_argument('--days', type=int, choices=range(1, 22),
-                            default=21,
-                            help='days to grab')
-        parser.add_argument('--outputfile', type=str,
-                            default='tvtv.xml',
-                            help='output file with the xmltv data')
-        parser.add_argument('--configure', action='store_true',
-                            default=False,
-                            help='get all channels and create \
+                    description = 'YaTvGrabber, XMLTV grabbing script',
+                    epilog = 'Copyright (C) [2012] [keller.eric, lars.schmohl]',
+                    formatter_class = argparse.ArgumentDefaultsHelpFormatter)
+        parser.add_argument('--days', type = int, choices = range(1, 22),
+                            default = 21,
+                            help = 'days to grab')
+        parser.add_argument('--outputfile', type = str,
+                            default = 'tvtv.xml',
+                            help = 'output file with the xmltv data')
+        parser.add_argument('--configure', action = 'store_true',
+                            default = False,
+                            help = 'get all channels and create \
                             the channel file (normal grabbing is disabled)')
-        parser.add_argument('--configfile', type=str,
-                            default='/etc/yatvgrabber/grab.conf',
-                            help='configuration file for the grabber')
-        parser.add_argument('--channelfile', type=str,
-                            default='/etc/yatvgrabber/channel.grab',
-                            help='channel file for the grabber')
-        parser.add_argument('--cachedir', type=str,
-                            default='/var/cache/yatvgrabber',
-                            help='cache directory for the grabber')
-        parser.add_argument('--local', action='store_true',
-                            default=False,
-                            help='process only the local stored cache files')
+        parser.add_argument('--configfile', type = str,
+                            default = '/etc/yatvgrabber/grab.conf',
+                            help = 'configuration file for the grabber')
+        parser.add_argument('--channelfile', type = str,
+                            default = '/etc/yatvgrabber/channel.grab',
+                            help = 'channel file for the grabber')
+        parser.add_argument('--cachedir', type = str,
+                            default = '/var/cache/yatvgrabber',
+                            help = 'cache directory for the grabber')
+        parser.add_argument('--local', action = 'store_true',
+                            default = False,
+                            help = 'process only the local stored cache files')
 
         # parse the arguments
         ArgumentParser.args = parser.parse_args()
@@ -158,24 +184,26 @@ def preGrabCleanUp():
     else:
         # cleanup the grabbed files - just the empty files
         subprocess.call('find %s -type f -empty -not -name ".*" \
-                         -exec rm -f \'{}\' +' % tmpCacheDir, shell=True)
+                         -exec rm -f \'{}\' +' % tmpCacheDir, shell = True)
 
 
 def postGrabCleanUp():
     tmpCacheDir = ArgumentParser.args.cachedir
     # cleanup the grabbed files - just the empty files
     subprocess.call('find %s -type f -empty -not -name ".*" \
-                     -exec rm -f \'{}\' +' % tmpCacheDir, shell=True)
+                     -exec rm -f \'{}\' +' % tmpCacheDir, shell = True)
     # cleanup the grabbed files - files which are not used anymore
     subprocess.call('find %s -type f -atime +1 -not -name ".*" \
-                     -exec rm -f \'{}\' +' % tmpCacheDir, shell=True)
+                     -exec rm -f \'{}\' +' % tmpCacheDir, shell = True)
 
 
 class AppOpener(urllib.FancyURLopener):
     user_agents = ['Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Win64; x64; Trident/5.0)',
-                   'Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.0; SLCC1; .NET CLR 2.0.50727; Media Center PC 5.0; .NET CLR 3.0.04506)',
-                   'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:10.0.2) Gecko/20100101 Firefox/10.0.2',
-                   'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:11.0) Gecko/20100101 Firefox/11.0']
+                   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_2) AppleWebKit/536.26.14 (KHTML, like Gecko) Version/6.0.1 Safari/536.26.14',
+                   'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:17.0) Gecko/17.0 Firefox/17.0',
+                   'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:16.0) Gecko/20100101 Firefox/16.0',
+                   'Mozilla/5.0 (iPhone; CPU iPhone OS 6_0_1 like Mac OS X) AppleWebKit/536.26 (KHTML, like Gecko) Version/6.0 Mobile/10A525 Safari/8536.25',
+                   'Mozilla/5.0 (Linux; Android 4.1.2; Nexus 7 Build/JZO54K) AppleWebKit/535.19 (KHTML, like Gecko) Chrome/18.0.1025.166 Safari/535.19']
     version = choice(user_agents)
 
 
@@ -188,9 +216,13 @@ def getOverviewPage(base_url):
             urllib.urlretrieve(base_url, filename)
         if not os.path.isfile(filename):
             raise Warning(filename)
+        else:
+            if os.stat(filename).st_size == 0:
+                os.remove(filename)
+                raise Warning(filename)
     except:
         print 'error retrieve / open file: %s' % filename
-        return ''
+        sys.exit(-1)
     return open(filename, 'r').read().decode('utf-8')
 
 
@@ -203,9 +235,13 @@ def getAdditionalPage(base_url):
             urllib.urlretrieve('%s/tvtv/index.vm?mainTemplate=web%%2FadditionalChannelsSelection.vm' % base_url, filename)
         if not os.path.isfile(filename):
             raise Warning(filename)
+        else:
+            if os.stat(filename).st_size == 0:
+                os.remove(filename)
+                raise Warning(filename)
     except:
         print 'error retrieve / open file: %s' % filename
-        return ''
+        sys.exit(-1)
     return open(filename, 'r').read().decode('utf-8')
 
 
@@ -227,9 +263,13 @@ def getWeekDayPage(base_url, week, day, channelId):
             urllib.urlretrieve(grabUrl, filename)
         if not os.path.isfile(filename):
             raise Warning(filename)
+        else:
+            if os.stat(filename).st_size == 0:
+                os.remove(filename)
+                raise Warning(filename)
     except:
         print 'error retrieve / open file: %s' % filename
-        return ''
+        sys.exit(-1)
     return filename
 
 
@@ -237,15 +277,19 @@ def getProgramPage(base_url, programId):
     # use the page from cache if available
     filename = '%s/%s.html' % (ArgumentParser.args.cachedir, programId)
     try:
-        # always cached the program page if available
+        # always use the cached program page if available
         if not ArgumentParser.args.local and not os.path.isfile(filename):
             urllib.urlretrieve('%s/tvtv/web/programdetails.vm?programmeId=%s' % \
                                (base_url, programId), filename)
         if not os.path.isfile(filename):
             raise Warning(filename)
+        else:
+            if os.stat(filename).st_size == 0:
+                os.remove(filename)
+                raise Warning(filename)
     except:
         print 'error retrieve / open file: %s' % filename
-        return ''
+        sys.exit(-1)
     return filename
 
 
@@ -279,7 +323,7 @@ def parseChannelData(pagename, days):
             grabPlan.append([weeksToGrab, dayno])
 
     # multiprocessing
-    pool = Pool(processes=None, initializer=initializeProcess)
+    pool = Pool(processes = None, initializer = initializeProcess)
 
     resultsList = []
     for entry in grabPlan:
@@ -313,7 +357,7 @@ def parseChannelData(pagename, days):
 
     # collect the results
     programIdList = []
-    [programIdList.extend(tmpResults.get(timeout=10))
+    [programIdList.extend(tmpResults.get(timeout = 10))
         for tmpResults in resultsList]
 
     #program page getting loop
@@ -323,7 +367,7 @@ def parseChannelData(pagename, days):
     for programId in programIdList:
         #debug output
         tmpTime2 = datetime.datetime.today()
-        if (tmpTime2 > (tmpTime1 + datetime.timedelta(minutes=5))):
+        if (tmpTime2 > (tmpTime1 + datetime.timedelta(minutes = 5))):
             print "[%s] progress: %s of %s program pages" % \
                 (tmpTime2.strftime('%Y-%m-%d %H:%M:%S'),
                  stepProgrammeIds,
@@ -337,7 +381,7 @@ def parseChannelData(pagename, days):
         if programFileName != '':
             pool.apply_async(processProgramPage,
                              (programId, programFileName,),
-                             callback=contentInjectCallback)
+                             callback = contentInjectCallback)
             #retValue = processProgramPage(programId, programFileName)
             #contentInjectCallback(retValue)
         stepProgrammeIds += 1
@@ -574,6 +618,7 @@ def processProgramPage(programId, filename):
 
     # min data found?
     try:
+        programPage = programPage.split(r'id="details_programme"', 1)[1]
         if RegExStorage.regExChannelId3.search(programPage) == None:
             raise Warning(programId)
         if RegExStorage.regExDate.search(programPage) == None:
@@ -599,12 +644,7 @@ def processProgramPage(programId, filename):
         programData[programId]['date'] = CleanFromTags(foundStr)
 
     #cut down the content
-    try:
-        programPage = programPage.split(r'class="program-content"')[1]
-        programPage = programPage.split(r'class="list_detail"')[0]
-    except:
-        os.remove(filename)
-        return {programId: {}}
+    programPage = programPage.split(r'class="list_detail"', 1)[0]
 
     # date
     date = ''
