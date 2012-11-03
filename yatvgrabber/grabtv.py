@@ -220,8 +220,8 @@ def getAdditionalPage(base_url):
 
 
 def getWeekDayPage(base_url, week, day, channelId):
-    print 'grabbing %s week %s day %s channelid %s ' % \
-            (base_url, week, day, channelId)
+    print 'grabbing %s week %s day %s channelid %s ' % (base_url, week, day, channelId)
+    sys.stdout.flush()
     filename = '%s/week=%s-day=%s-channel=%s.html' % \
                 (ArgumentParser.args.cachedir, week, day, channelId)
     if day > -1:
