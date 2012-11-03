@@ -385,7 +385,6 @@ def contentInjectCallback(programEntry):
     for programid in programEntry.keys():
         if 0 == llen(programEntry[programid]):
             print 'parsing error of programid %s' % programid
-            sys.stdout.flush()
             continue
 
         # get the programme data
@@ -396,13 +395,11 @@ def contentInjectCallback(programEntry):
            'channel' not in pdata or \
            'title' not in pdata:
             print 'minimal required data not available of programid %s' % programid
-            sys.stdout.flush()
             continue
         if pdata['start'] == '' or \
            pdata['channel'] == '' or \
            pdata['title'] == '':
             print 'minimal required data is invalid of programid %s' % programid
-            sys.stdout.flush()
             continue
 
         tmpData = []
