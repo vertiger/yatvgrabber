@@ -9,7 +9,7 @@ date >> $LOG_FILE
 
 #remove the old file
 if [ -e $XMLTV_FILE ]; then
-    rm -rf $XMLTV_FILE >> $LOG_FILE
+    mv -f $XMLTV_FILE ${XMLTV_FILE}.old >> $LOG_FILE
 fi
 
 #get the data

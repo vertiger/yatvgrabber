@@ -22,24 +22,6 @@ from configobj import ConfigObj
 
 def main():
 
-    lockfile = "/var/lock/grabtv.py.lock"
-    if os.access(lockfile, os.F_OK):
-        pidfile = open(lockfile, "r")
-        pidfile.seek(0)
-        old_pd = pidfile.readline()
-        # Now we check the PID from lock file matches to the current
-        # process PID
-        if os.path.exists("/proc/%s" % old_pd):
-                print "error, already running with pid %s," % old_pd
-                sys.exit(-1)
-        else:
-                os.remove(lockfile)
-
-    #This is part of code where we put a PID file in the lock file
-    pidfile = open(lockfile, "w")
-    pidfile.write("%s" % os.getpid())
-    pidfile.close
-
     # argument parsing
     ArgumentParser.parseArguments()
 
@@ -65,7 +47,6 @@ def main():
         except:
             print 'unable the write config file: %s' % \
                   ArgumentParser.args.configfile
-            os.remove(lockfile)
             sys.exit(-1)
 
     # execute the configure mode
@@ -75,18 +56,14 @@ def main():
         [tmpChannelList.update(parseChannelList(page))
             for page in reversed(grabConf['page'])]
         try:
-            channelfile = codecs.open(tmpChannelFile, 'w', 'utf-8')
             tmpList = []
             [tmpList.append('%s#%s\n' % (channelid, tmpChannelList[channelid]))
                 for channelid in sorted(tmpChannelList.keys())]
-            channelfile.write(string.joinfields(tmpList, ''))
-            channelfile.close()
+            codecs.open(tmpChannelFile, 'w', 'utf-8').write(string.joinfields(tmpList, ''))
         except:
             print 'error the writing channel file: %s' % tmpChannelFile
-            os.remove(lockfile)
             sys.exit(-1)
         print 'channel file successfully written, file: %s' % tmpChannelFile
-        os.remove(lockfile)
         sys.exit(0)
 
     # normal grabbing workflow
@@ -112,7 +89,6 @@ def main():
         postGrabCleanUp()
 
     #normal exit
-    os.remove(lockfile)
     sys.exit(0)
 
 
@@ -201,9 +177,7 @@ class AppOpener(urllib.FancyURLopener):
     user_agents = ['Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Win64; x64; Trident/5.0)',
                    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_2) AppleWebKit/536.26.14 (KHTML, like Gecko) Version/6.0.1 Safari/536.26.14',
                    'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:17.0) Gecko/17.0 Firefox/17.0',
-                   'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:16.0) Gecko/20100101 Firefox/16.0',
-                   'Mozilla/5.0 (iPhone; CPU iPhone OS 6_0_1 like Mac OS X) AppleWebKit/536.26 (KHTML, like Gecko) Version/6.0 Mobile/10A525 Safari/8536.25',
-                   'Mozilla/5.0 (Linux; Android 4.1.2; Nexus 7 Build/JZO54K) AppleWebKit/535.19 (KHTML, like Gecko) Chrome/18.0.1025.166 Safari/535.19']
+                   'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:16.0) Gecko/20100101 Firefox/16.0']
     version = choice(user_agents)
 
 
@@ -372,6 +346,7 @@ def parseChannelData(pagename, days):
                 (tmpTime2.strftime('%Y-%m-%d %H:%M:%S'),
                  stepProgrammeIds,
                  totalProgrammeIds)
+            sys.stdout.flush()
             tmpTime1 = tmpTime2
 
         # get the program page
@@ -410,6 +385,7 @@ def contentInjectCallback(programEntry):
     for programid in programEntry.keys():
         if 0 == llen(programEntry[programid]):
             print 'parsing error of programid %s' % programid
+            sys.stdout.flush()
             continue
 
         # get the programme data
@@ -419,14 +395,14 @@ def contentInjectCallback(programEntry):
         if 'start' not in pdata or \
            'channel' not in pdata or \
            'title' not in pdata:
-            print 'minimal required data not available of programid %s' % \
-                programid
+            print 'minimal required data not available of programid %s' % programid
+            sys.stdout.flush()
             continue
         if pdata['start'] == '' or \
            pdata['channel'] == '' or \
            pdata['title'] == '':
-            print 'minimal required data not available of programid %s' % \
-                programid
+            print 'minimal required data is invalid of programid %s' % programid
+            sys.stdout.flush()
             continue
 
         tmpData = []
