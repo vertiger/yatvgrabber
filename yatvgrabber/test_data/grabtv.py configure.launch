@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<launchConfiguration type="org.python.pydev.debug.regularLaunchConfigurationType">
+<listAttribute key="org.eclipse.debug.core.MAPPED_RESOURCE_PATHS">
+<listEntry value="/yatvgrabber/grabtv.py"/>
+</listAttribute>
+<listAttribute key="org.eclipse.debug.core.MAPPED_RESOURCE_TYPES">
+<listEntry value="1"/>
+</listAttribute>
+<stringAttribute key="org.eclipse.ui.externaltools.ATTR_LOCATION" value="${workspace_loc:yatvgrabber/grabtv.py}"/>
+<stringAttribute key="org.eclipse.ui.externaltools.ATTR_OTHER_WORKING_DIRECTORY" value="${workspace_loc:yatvgrabber/test_data}"/>
+<stringAttribute key="org.eclipse.ui.externaltools.ATTR_TOOL_ARGUMENTS" value="--outputfile cc.xml --cachedir cache --configfile grab.conf --channelfile channel.grab --weeks 1 --configure"/>
+<stringAttribute key="org.eclipse.ui.externaltools.ATTR_WORKING_DIRECTORY" value="${workspace_loc:yatvgrabber/test_data}"/>
+<stringAttribute key="org.python.pydev.debug.ATTR_INTERPRETER" value="__default"/>
+<stringAttribute key="org.python.pydev.debug.ATTR_PROJECT" value="yatvgrabber"/>
+</launchConfiguration>

@@ -9,11 +9,11 @@ import codecs
 import signal
 import string
 import urllib
-#import logging
 import datetime
 import subprocess
 from random import choice
 from multiprocessing import Pool
+from xml.sax.saxutils import escape, quoteattr
 
 # third party libraries
 import argparse
@@ -38,10 +38,7 @@ def main():
         # write the default configuration
         grabConf['page'] = ['http://www.tvtv.ch',
                             'http://www.tvtv.de',
-                            'http://www.tvtv.at',
-                            'http://www.tvtv.co.uk',
-                            'http://www.tvtv.fr',
-                            'http://www.tvtv.it']
+                            'http://www.tvtv.at']
         try:
             grabConf.write()
         except:
@@ -53,8 +50,7 @@ def main():
     tmpChannelFile = ArgumentParser.args.channelfile
     if ArgumentParser.args.configure:
         tmpChannelList = {}
-        [tmpChannelList.update(parseChannelList(page))
-            for page in reversed(grabConf['page'])]
+        [tmpChannelList.update(parseChannelList(page)) for page in reversed(grabConf['page'])]
         try:
             tmpList = []
             [tmpList.append('%s#%s\n' % (channelid, tmpChannelList[channelid]))
@@ -82,7 +78,7 @@ def main():
     DataStorage.channelList = tmpChanList
 
     # get the program data
-    parseChannelData(grabConf['page'][0], ArgumentParser.args.days)
+    parseChannelData(grabConf['page'][0], ArgumentParser.args.weeks)
 
     # post grab cleanup - do not cleanup after process locally
     if not ArgumentParser.args.local:
@@ -102,11 +98,11 @@ class ArgumentParser():
     def parseArguments():
         parser = argparse.ArgumentParser(
                     description = 'YaTvGrabber, XMLTV grabbing script',
-                    epilog = 'Copyright (C) [2012] [keller.eric, lars.schmohl]',
+                    epilog = 'Copyright (C) [2013] [keller.eric, lars.schmohl]',
                     formatter_class = argparse.ArgumentDefaultsHelpFormatter)
-        parser.add_argument('--days', type = int, choices = range(1, 22),
-                            default = 21,
-                            help = 'days to grab')
+        parser.add_argument('--weeks', type = int, choices = range(1, 4),
+                            default = 3,
+                            help = 'weeks to grab')
         parser.add_argument('--outputfile', type = str,
                             default = 'tvtv.xml',
                             help = 'output file with the xmltv data')
@@ -200,38 +196,13 @@ def getOverviewPage(base_url):
     return open(filename, 'r').read().decode('utf-8')
 
 
-def getAdditionalPage(base_url):
-    filename = '%s/%s.additional.html' % (ArgumentParser.args.cachedir,
-                                          (base_url.split('/')[-1]).strip())
+def getWeekDayPage(base_url, week, channelId):
+    print 'grabbing %s week %s channel %s ' % (base_url, week, channelId)
+    filename = '%s/week=%s-channel=%s.html' % (ArgumentParser.args.cachedir, week, channelId)
+    # use channelWeek to get the hole week for one channel
+    grabUrl = '%s/senderlistings_channel.php?channel=%s&woche=%s' % (base_url, channelId, week)
     try:
-        if not ArgumentParser.args.local:
-            # always retrieve the additional page in none local mode
-            urllib.urlretrieve('%s/tvtv/index.vm?mainTemplate=web%%2FadditionalChannelsSelection.vm' % base_url, filename)
-        if not os.path.isfile(filename):
-            raise Warning(filename)
-        else:
-            if os.stat(filename).st_size == 0:
-                os.remove(filename)
-                raise Warning(filename)
-    except:
-        print 'error retrieve / open file: %s' % filename
-        sys.exit(-1)
-    return open(filename, 'r').read().decode('utf-8')
-
-
-def getWeekDayPage(base_url, week, day, channelId):
-    print 'grabbing %s week %s day %s channelid %s ' % (base_url, week, day, channelId)
-    filename = '%s/week=%s-day=%s-channel=%s.html' % \
-                (ArgumentParser.args.cachedir, week, day, channelId)
-    if day > -1:
         # always retrieve the day page in none local mode
-        grabUrl = '%s/tvtv/index.vm?weekId=%s&dayId=%s&chnl=%s' % \
-                    (base_url, week, day, channelId)
-    else:
-        # use channelWeek to get the hole week for one channel
-        grabUrl = '%s/tvtv/index.vm?weekId=%s&dayId=0&weekChannel=%s' % \
-                    (base_url, week, channelId)
-    try:
         if not ArgumentParser.args.local:
             urllib.urlretrieve(grabUrl, filename)
         if not os.path.isfile(filename):
@@ -252,8 +223,7 @@ def getProgramPage(base_url, programId):
     try:
         # always use the cached program page if available
         if not ArgumentParser.args.local and not os.path.isfile(filename):
-            urllib.urlretrieve('%s/tvtv/web/programdetails.vm?programmeId=%s' % \
-                               (base_url, programId), filename)
+            urllib.urlretrieve('%s/detailansicht.php?sendungs_id=%s' % (base_url, programId), filename)
         if not os.path.isfile(filename):
             raise Warning(filename)
         else:
@@ -271,38 +241,22 @@ def parseChannelList(pagename):
 
     # parse the main page
     for line in getOverviewPage(pagename).split('\n'):
-        for foundId in RegExStorage.regExChannelId1.findall(line):
-            for foundName in RegExStorage.regExChannelName.findall(line):
-                channellist[foundId] = '%s (%s)' % (foundName, pagename)
-
-    # additional page page
-    for line in getAdditionalPage(pagename).split('\n'):
-        for foundId in RegExStorage.regExChannelId2.findall(line):
-            channellist[foundId] = '%s (%s)' % ((line.split('>')[-1]).strip(),
-                                                pagename)
+        for programId in RegExStorage.regExChannelId1.findall(line):
+            for programName in RegExStorage.regExChannelName.findall(line):
+                channellist[programId] = '%s (%s)' % (programName, pagename)
 
     return channellist
 
 
-def parseChannelData(pagename, days):
-    grabPlan = []
-    weeksToGrab = days // 7
-    leftoverDaysToGrab = days % 7
-    if weeksToGrab > 0:
-        for weekno in range(0, weeksToGrab):
-            grabPlan.append([weekno, -1])
-    if leftoverDaysToGrab > 0:
-        for dayno in range(0, leftoverDaysToGrab):
-            grabPlan.append([weeksToGrab, dayno])
+def parseChannelData(pagename, weeks):
 
     # multiprocessing
     pool = Pool(processes = None, initializer = initializeProcess)
 
     resultsList = []
-    for entry in grabPlan:
+    for entry in range(0, weeks):
         for channelId in DataStorage.channelList.keys():
-            pageFileName = getWeekDayPage(pagename, entry[0], entry[1],
-                                          channelId)
+            pageFileName = getWeekDayPage(pagename, entry, channelId)
             resultsList.append(pool.apply_async(processChannelPage,
                                                 (pageFileName,)))
 
@@ -325,6 +279,7 @@ def parseChannelData(pagename, days):
         tmpData.append('  <channel id="%s">\n' % channelid)
         tmpData.append('    <display-name>%s</display-name>\n' % \
                        DataStorage.channelList[channelid].decode('latin1'))
+        tmpData.append('    <icon src="%s/images/senderlogos/%s.gif" />\n' % (pagename, channelid.lower()))
         tmpData.append('  </channel>\n')
     DataStorage.xmlDataFile.write(string.joinfields(tmpData, ''))
 
@@ -370,11 +325,15 @@ def parseChannelData(pagename, days):
 
 def processChannelPage(filename):
     tmpData = ''
+    programIds = []
     try:
         tmpData = open(filename, 'r').read().decode('utf-8')
     except:
-        return []
-    return RegExStorage.regExProgramId.findall(tmpData)
+        return programIds
+    for foundId in RegExStorage.regExProgramId.findall(tmpData):
+        if foundId not in programIds:
+            programIds.append(foundId)
+    return programIds
 
 
 def contentInjectCallback(programEntry):
@@ -389,14 +348,10 @@ def contentInjectCallback(programEntry):
         pdata = programEntry[programid]
 
         # check min requirements
-        if 'start' not in pdata or \
-           'channel' not in pdata or \
-           'title' not in pdata:
+        if 'start' not in pdata or 'channel' not in pdata or 'title' not in pdata:
             print 'minimal required data not available of programid %s' % programid
             continue
-        if pdata['start'] == '' or \
-           pdata['channel'] == '' or \
-           pdata['title'] == '':
+        if pdata['start'] == '' or pdata['channel'] == '' or pdata['title'] == '':
             print 'minimal required data is invalid of programid %s' % programid
             continue
 
@@ -411,87 +366,73 @@ def contentInjectCallback(programEntry):
         if 'title' in pdata:
             for tmpLang in pdata['title'].keys():
                 if pdata['title'][tmpLang] != '':
-                    tmpData.append('    <title lang="%s">%s</title>\n' % \
-                                   (tmpLang, pdata['title'][tmpLang]))
+                    tmpData.append('    <title lang="%s">%s</title>\n' % (tmpLang, escape(pdata['title'][tmpLang])))
         # write the sub-title
         if 'sub-title' in pdata:
             for tmpLang in pdata['sub-title'].keys():
                 if pdata['sub-title'][tmpLang] != '':
-                    tmpData.append('    <sub-title lang="%s">%s</sub-title>\n' % \
-                                   (tmpLang, pdata['sub-title'][tmpLang]))
+                    tmpData.append('    <sub-title lang="%s">%s</sub-title>\n' % (tmpLang, escape(pdata['sub-title'][tmpLang])))
         # write the description
         if 'desc' in pdata:
             for tmpLang in pdata['desc'].keys():
                 if pdata['desc'][tmpLang] != '':
-                    tmpData.append('    <desc lang="%s">%s</desc>\n' % \
-                                   (tmpLang, pdata['desc'][tmpLang]))
+                    tmpData.append('    <desc lang="%s">%s</desc>\n' % (tmpLang, escape(pdata['desc'][tmpLang])))
 
         tmpCredits = []
         # director
         if 'director' in pdata:
             for tmpDirector in pdata['director']:
                 if tmpDirector != '':
-                    tmpCredits.append('      <director>%s</director>\n' % \
-                                      tmpDirector)
+                    tmpCredits.append('      <director>%s</director>\n' % escape(tmpDirector))
         # actors
         if 'actor' in pdata:
             for tmpActorData in pdata['actor']:
                 for tmpActor in tmpActorData.keys():
                     if tmpActor != '':
                         if tmpActorData[tmpActor] == '':
-                            tmpCredits.append('      <actor>%s</actor>\n' % \
-                                              tmpActor)
+                            tmpCredits.append('      <actor>%s</actor>\n' % escape(tmpActor))
                         else:
-                            tmpCredits.append('      <actor role="%s">%s</actor>\n' % \
-                                              (tmpActorData[tmpActor],
-                                               tmpActor))
+                            tmpCredits.append('      <actor role=%s>%s</actor>\n' % (quoteattr(tmpActorData[tmpActor]), escape(tmpActor)))
         # writer
         if 'writer' in pdata:
             for tmpWriter in pdata['writer']:
                 if tmpWriter != '':
-                    tmpCredits.append('      <writer>%s</writer>\n' % \
-                                      tmpWriter)
+                    tmpCredits.append('      <writer>%s</writer>\n' % escape(tmpWriter))
         # adapter
         if 'adapter' in pdata:
             for tmpAdapter in pdata['adapter']:
                 if tmpAdapter != '':
-                    tmpCredits.append('      <adapter>%s</adapter>\n' % \
-                                      tmpAdapter)
+                    tmpCredits.append('      <adapter>%s</adapter>\n' % escape(tmpAdapter))
         # producer
         if 'producer' in pdata:
             for tmpProducer in pdata['producer']:
                 if tmpProducer != '':
-                    tmpCredits.append('      <producer>%s</producer>\n' % \
-                                      tmpProducer)
+                    tmpCredits.append('      <producer>%s</producer>\n' % escape(tmpProducer))
         # composer
         if 'composer' in pdata:
             for tmpComposer in pdata['composer']:
                 if tmpComposer != '':
-                    tmpCredits.append('      <composer>%s</composer>\n' % \
-                                      tmpComposer)
+                    tmpCredits.append('      <composer>%s</composer>\n' % escape(tmpComposer))
         # editor
         if 'editor' in pdata:
             for tmpEditor in pdata['editor']:
                 if tmpEditor != '':
-                    tmpCredits.append('      <editor>%s</editor>\n' % \
-                                      tmpEditor)
+                    tmpCredits.append('      <editor>%s</editor>\n' % escape(tmpEditor))
         # presenter
         if 'presenter' in pdata:
             for tmpPresenter in pdata['presenter']:
                 if tmpPresenter != '':
-                    tmpCredits.append('      <presenter>%s</presenter>\n' % \
-                                      tmpPresenter)
+                    tmpCredits.append('      <presenter>%s</presenter>\n' % escape(tmpPresenter))
         # commentator
         if 'commentator' in pdata:
             for tmpCommentator in pdata['commentator']:
                 if tmpCommentator != '':
-                    tmpCredits.append('      <commentator>%s</commentator>\n' % \
-                                      tmpCommentator)
+                    tmpCredits.append('      <commentator>%s</commentator>\n' % escape(tmpCommentator))
         # guest
         if 'guest' in pdata:
             for tmpGuest in pdata['guest']:
                 if tmpGuest != '':
-                    tmpCredits.append('      <guest>%s</guest>\n' % tmpGuest)
+                    tmpCredits.append('      <guest>%s</guest>\n' % escape(tmpGuest))
 
         # write the credits
         if llen(tmpCredits) > 0:
@@ -508,29 +449,25 @@ def contentInjectCallback(programEntry):
             for tmpLang in pdata['category']:
                 for tmpCategory in pdata['category'][tmpLang]:
                     if tmpCategory != '':
-                        tmpData.append('    <category lang="%s">%s</category>\n' % \
-                                       (tmpLang, tmpCategory))
+                        tmpData.append('    <category lang="%s">%s</category>\n' % (tmpLang, escape(tmpCategory)))
         # language
         if 'language' in pdata:
             for tmpLang in pdata['language']:
                 for tmpLanguage in pdata['language'][tmpLang]:
                     if tmpLanguage != '':
-                        tmpData.append('    <language lang="%s">%s</language>\n' % \
-                                       (tmpLang, tmpLanguage))
+                        tmpData.append('    <language lang="%s">%s</language>\n' % (tmpLang, escape(tmpLanguage)))
         # orig-language
         if 'orig-language' in pdata:
             for tmpLang in pdata['orig-language']:
                 for tmpOrigLanguage in pdata['orig-language'][tmpLang]:
                     if tmpOrigLanguage != '':
-                        tmpData.append('    <orig-language lang="%s">%s</orig-language>\n' % \
-                                       (tmpLang, tmpOrigLanguage))
+                        tmpData.append('    <orig-language lang="%s">%s</orig-language>\n' % (tmpLang, escape(tmpOrigLanguage)))
         # length
         if 'length' in pdata:
             for tmpUnits in pdata['length']:
                 for tmpValue in pdata['length'][tmpUnits]:
                     if tmpValue != '':
-                        tmpData.append('    <length units="%s">%s</length>\n' % \
-                                       (tmpUnits, tmpValue))
+                        tmpData.append('    <length units="%s">%s</length>\n' % (tmpUnits, escape(tmpValue)))
         # icon
         if 'icon' in pdata and llen(pdata['icon']) > 0:
             tmpIcon = []
@@ -548,15 +485,13 @@ def contentInjectCallback(programEntry):
             for tmpLang in pdata['country']:
                 for tmpCountry in pdata['country'][tmpLang]:
                     if tmpCountry != '':
-                        tmpData.append('    <country lang="%s">%s</country>\n' % \
-                                       (tmpLang, tmpCountry))
+                        tmpData.append('    <country lang="%s">%s</country>\n' % (tmpLang, escape(tmpCountry)))
 
         # episode numbers
         if 'episode-num' in pdata:
             for tmpSystem in pdata['episode-num']:
                 if pdata['episode-num'][tmpSystem] != '':
-                    tmpData.append('    <episode-num system="%s">%s</episode-num>\n' % \
-                                   (tmpSystem, pdata['episode-num'][tmpSystem]))
+                    tmpData.append('    <episode-num system="%s">%s</episode-num>\n' % (tmpSystem, pdata['episode-num'][tmpSystem]))
         # video quality
         if "HD" in DataStorage.channelList[pdata['channel']]:
             tmpData.append('    <video>\n')
@@ -566,9 +501,8 @@ def contentInjectCallback(programEntry):
         if 'rating' in pdata:
             for tmpSystem in pdata['rating']:
                 if pdata['rating'][tmpSystem] != '':
-                    tmpData.append('    <regExRating system="%s">\n' % tmpSystem)
-                    tmpData.append('      <value>%s</value>\n' % \
-                                   pdata['rating'][tmpSystem])
+                    tmpData.append('    <regExRating system=%s>\n' % quoteattr(tmpSystem))
+                    tmpData.append('      <value>%s</value>\n' % escape(pdata['rating'][tmpSystem]))
                     tmpData.append('    </regExRating>\n')
 
         # end programme tag
@@ -589,12 +523,13 @@ def processProgramPage(programId, filename):
 
     # min data found?
     try:
-        programPage = programPage.split(r'id="details_programme"', 1)[1]
-        if RegExStorage.regExChannelId3.search(programPage) == None:
+        if not RegExStorage.regExChannelId3.search(programPage):
             raise Warning(programId)
-        if RegExStorage.regExDate.search(programPage) == None:
+        if not RegExStorage.regExDate.search(programPage):
             raise Warning(programId)
-        if RegExStorage.regExStart.search(programPage) == None:
+        if not RegExStorage.regExStart.search(programPage):
+            raise Warning(programId)
+        if not RegExStorage.regExTitle.search(programPage):
             raise Warning(programId)
     except:
         os.remove(filename)
@@ -613,9 +548,6 @@ def processProgramPage(programId, filename):
     # production year
     for foundStr in RegExStorage.regExProductionYear.findall(programPage):
         programData[programId]['date'] = CleanFromTags(foundStr)
-
-    #cut down the content
-    programPage = programPage.split(r'class="list_detail"', 1)[0]
 
     # date
     date = ''
@@ -648,21 +580,12 @@ def processProgramPage(programId, filename):
 
     # original title
     for foundStr in RegExStorage.regExOrgTitle.findall(programPage):
-        tmpTitle = {'de': CleanFromTags(foundStr)}
-        if 'title' in programData[programId] and \
-            programData[programId]['title']['de'] != '':
-            if tmpTitle['de'] in programData[programId]['title']['de']:
-                # org tile found, just use the title
-                tmpTitle['de'] = programData[programId]['title']['de']
-            else:
-                # org title in title not found - concat the titles
-                tmpTitle['de'] = "%s - %s" % \
-                    (tmpTitle['de'], programData[programId]['title']['de'])
-        programData[programId]['title'] = tmpTitle
-    if 'title' not in programData[programId] or \
-        programData[programId]['title']['de'] == '':
-        os.remove(filename)
-        return {programId: {}}
+        tmpTitle = CleanFromTags(foundStr)
+        if tmpTitle not in programData[programId]['title']['de'] and \
+            programData[programId]['title']['de'] not in tmpTitle:
+            # org title in title not found - concat the titles
+            tmpTitle = "%s - %s" % (tmpTitle, programData[programId]['title']['de'])
+        programData[programId]['title']['de'] = tmpTitle
 
     # sub-title
     for foundStr in RegExStorage.regExSubtitle.findall(programPage):
@@ -745,58 +668,85 @@ def processProgramPage(programId, filename):
 
 class RegExStorage():
     # for the configuration workflow
-    regExChannelId1 = re.compile(r'weekChannel=([0-9]+)"')
-    regExChannelName = re.compile(r'class="">(.*)<')
-    regExChannelId2 = re.compile(r'channelLogo=([0-9]+)"')
+    regExChannelId1 = re.compile(r'channel=([\w]+)">')
+    regExChannelName = re.compile(r'">(.*)</a>')
 
     # for the grab workflow
-    regExProgramId = re.compile(r'programmeId=([0-9]+)')
-    regExChannelId3 = re.compile(r's.prop16="[^\(]+\(([0-9]+)\)"')
-    regExTitle = re.compile(r's.prop5="(.*)\[[0-9]+\]"')
-    regExSubtitle = re.compile(r'<span class="fb-b9">(.*?)</span>')
-    regExEpisode = re.compile(r'<span class="fn-b9">(.*?)</span>')
-    regExProductionYear = re.compile(r'<td class="fb-b9 trailing">.*?([0-9]{4}).*?</td>', re.DOTALL)
-    regExDescription = re.compile(r'<span class="fn-b10">(.*?)</span>', re.DOTALL)
-    regExDate = re.compile(r'>[^<]+([0-9]{2}\.[0-9]{2}\.[0-9]{4})<')
-    regExStart = re.compile(r'>Beginn: ([0-9]{2}:[0-9]{2}) Uhr<')
-    regExStop = re.compile(r'>Ende: ([0-9]{2}:[0-9]{2}) Uhr<')
-    regExActors = re.compile(r'>Darsteller:</td>(.+?)</tr>', re.DOTALL)
-    regExProducer = re.compile(r'>Produktion:</td>(.+?)</tr>', re.DOTALL)
-    regExDirector = re.compile(r'>Regie:</td>(.+?)</tr>', re.DOTALL)
-    regExWriter = re.compile(r'>Autor:</td>(.+?)</tr>', re.DOTALL)
-    regExRating = re.compile(r'>FSK:</td>.*: ([0-9]+).*</tr>', re.DOTALL)
-    regExCategory = re.compile(r'>Kategorie:</td>(.+?)</tr>', re.DOTALL)
-    regExCountry = re.compile(r'>Land:</td>(.+?)</tr>', re.DOTALL)
-    regExSeason = re.compile(r'Staffel ([0-9]+)')
-    regExEpisodeNum = re.compile(r'Folge ([0-9]+)')
-    regExEpisodeTotal = re.compile(r'Folge [0-9]+/([0-9]+)')
-    regExOrgTitle = re.compile(r'>Orginaltitel:</td>(.+?)</tr>', re.DOTALL)
-    regExPresenter = re.compile(r'sentiert von:</td>(.+?)</tr>', re.DOTALL)
+    regExProgramId = re.compile(r'openDetailPopup\(\'[0-9]+\', \'([0-9]+)\', \'[\w]+\'\)')
+    regExChannelId3 = re.compile(r'channel=([\w]+)\'')
+    regExTitle = re.compile(r'<h2 class="DetailTitel">(.*?)</h2>')
+    regExSubtitle = re.compile(r'<span class="DetailFolgeninfo">.*?<b>(.*?)</b></span>')
+    regExEpisode = re.compile(r'<span class="DetailFolgeninfo">(.*?)</span>')
+    regExProductionYear = re.compile(r'<span class="DetailJahr">([0-9]{4})</span>')
+    regExDescription = re.compile(r'<span class="DetailText">(.*?)</span>')
+    regExDate = re.compile(r'<span class="DetailblockDatum">[^<]+([0-9]{2}\.[0-9]{2}\.[0-9]{4})</span>')
+    regExStart = re.compile(r'<span class="DetailblockZeit">Beginn: ([0-9]{2}:[0-9]{2}) Uhr</span>')
+    regExStop = re.compile(r'<span class="DetailblockZeit">Ende: ([0-9]{2}:[0-9]{2}) Uhr</span>')
+    regExActors = re.compile(r'<span class="DetailblockDarsteller">(.*?)</span>')
+    regExProducer = re.compile(r'<span class="DetailblockProduktion">(.*?)</span>')
+    regExDirector = re.compile(r'<span class="DetailblockRegie">(.*?)</span>')
+    regExWriter = re.compile(r'<span class="DetailblockAutor">(.*?)</span>')
+    regExRating = re.compile(r'<span class="DetailblockFSK">(.*?)</span>')
+    regExCategory = re.compile(r'<span class="DetailblockKategorie">(.*?)</span>')
+    regExCountry = re.compile(r'<span class="DetailblockLand">(.*?)</span>')
+    regExSeason = re.compile(r'Staffel: ([0-9]+)')
+    regExEpisodeNum = re.compile(r'Folge: ([0-9]+)')
+    regExEpisodeTotal = re.compile(r'Folge: [0-9]+/([0-9]+)')
+    regExOrgTitle = re.compile(r'<span class="DetailblockOrig">(.*?)</span>')
+    regExPresenter = re.compile(r'<span class="DetailblockPresenter">(.*?)</span>')
 
     # treat special chars and words
-    charSpecial = {1: [re.compile(r'<[^>]*>'), r' '],
-                   2: [re.compile(r'&nbsp;'), r' '],
-                   3: [re.compile(r'\(Wiederholung\)'), r''],
+    charSpecial = {3: [re.compile(r'\(Wiederholung\)'), r''],
                    4: [re.compile(r'^Reihe: .+'), r''],
-                   5: [re.compile(r'&'), r'&amp;'],
-                   6: [re.compile(r'"'), r'&quot;'],
-                   7: [re.compile(r'\''), r'&apos;'],
                    95: [re.compile(r'c\<t'), r'c\'t'],
-                   96: [re.compile(r'<'), r'&lt;'],
-                   97: [re.compile(r'>'), r'&gt;'],
                    98: [re.compile(r'[\n\t ]+', re.DOTALL), r' '],
                    99: [re.compile(r',$'), r'']}
 
 
 def CleanFromTags(inputStr):
 
-    retStr = inputStr
+    retStr = strip_html(inputStr)
     for key in sorted(RegExStorage.charSpecial.keys()):
         # clean all special characters
         retStr = RegExStorage.charSpecial[key][0].sub(
                         RegExStorage.charSpecial[key][1], retStr)
 
     return retStr.strip()
+
+
+##
+# Removes HTML markup from a text string.
+#
+# @param text The HTML source.
+# @return The plain text.  If the HTML source contains non-ASCII
+#     entities or character references, this is a Unicode string.
+def strip_html(text):
+    def fixup(m):
+        text = m.group(0)
+        if text[:1] == "<":
+            return ""  # ignore tags
+        if text[:2] == "&#":
+            try:
+                if text[:3] == "&#x":
+                    return unichr(int(text[3:-1], 16))
+                else:
+                    return unichr(int(text[2:-1]))
+            except ValueError:
+                pass
+        elif text[:1] == "&":
+            import htmlentitydefs
+            entity = htmlentitydefs.entitydefs.get(text[1:-1])
+            if entity:
+                if entity[:2] == "&#":
+                    try:
+                        return unichr(int(entity[2:-1]))
+                    except ValueError:
+                        pass
+                else:
+                    return unicode(entity, "iso-8859-1")
+        return text  # leave as is
+    return re.sub("(?s)<[^>]*>|&#?\w+;", fixup, text)
+
 
 # open the gui
 if __name__ == "__main__":
