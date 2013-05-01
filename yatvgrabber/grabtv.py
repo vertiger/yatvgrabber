@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# standart libraries
+# standard libraries
 import os
 import re
 import sys
@@ -10,6 +10,7 @@ import signal
 import string
 import urllib
 import datetime
+import time
 import subprocess
 from random import choice
 from multiprocessing import Pool
@@ -357,9 +358,9 @@ def contentInjectCallback(programEntry):
 
         tmpData = []
         # concat the programme tag
-        tmpData.append('  <programme start="%s" ' % pdata['start'])
+        tmpData.append('  <programme start="%s %s" ' % (pdata['start'].strftime('%Y%m%d%H%M%S'), time.tzname[time.daylight]))
         if 'finish' in pdata and pdata['finish'] != '':
-            tmpData.append('stop="%s" ' % pdata['finish'])
+            tmpData.append('stop="%s %s" ' % (pdata['finish'].strftime('%Y%m%d%H%M%S'), time.tzname[time.daylight]))
         tmpData.append('channel="%s">\n' % pdata['channel'])
 
         # write the title
@@ -561,7 +562,7 @@ def processProgramPage(programId, filename):
             (starthour, startminute) = foundStr.strip().split(':')
             startdate = datetime.datetime(int(year), int(month), int(day),
                                           int(starthour), int(startminute))
-            programData[programId]['start'] = startdate.strftime('%Y%m%d%H%M%S')
+            programData[programId]['start'] = startdate
         except:
             os.remove(filename)
             return {programId: {}}
@@ -574,7 +575,7 @@ def processProgramPage(programId, filename):
             if startdate > enddate:
                 # program ends next day
                 enddate = enddate + datetime.timedelta(days = 1)
-            programData[programId]['finish'] = enddate.strftime('%Y%m%d%H%M%S')
+            programData[programId]['finish'] = enddate
         except:
             pass  # optional data
 
