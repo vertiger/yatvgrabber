@@ -19,6 +19,7 @@ from xml.sax.saxutils import escape, quoteattr
 # third party libraries
 import argparse
 from configobj import ConfigObj
+import pytz
 
 
 def main():
@@ -358,9 +359,10 @@ def contentInjectCallback(programEntry):
 
         tmpData = []
         # concat the programme tag
-        tmpData.append('  <programme start="%s %s" ' % (pdata['start'].strftime('%Y%m%d%H%M%S'), time.tzname[time.daylight]))
+        # timezone offset - the tvtv website always displays dates and times in the CET timezone
+        tmpData.append('  <programme start="%s" ' % pytz.timezone('Europe/Zurich').localize(pdate['start']).strftime('%Y%m%d%H%M%S %z'))
         if 'finish' in pdata and pdata['finish'] != '':
-            tmpData.append('stop="%s %s" ' % (pdata['finish'].strftime('%Y%m%d%H%M%S'), time.tzname[time.daylight]))
+            tmpData.append('stop="%s" ' % pytz.timezone('Europe/Zurich').localize(pdate['finish']).strftime('%Y%m%d%H%M%S %z'))
         tmpData.append('channel="%s">\n' % pdata['channel'])
 
         # write the title
