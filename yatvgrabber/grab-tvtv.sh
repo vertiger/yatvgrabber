@@ -24,7 +24,7 @@ fi
 if [ -e $XMLTV_FILE ]; then
     for id in $SOURCE_IDS
     do
-        nice mythfilldatabase --update --file --sourceid $id --xmlfile $XMLTV_FILE >> $LOG_FILE
+        nice mythfilldatabase --only-update-guide --file --sourceid $id --xmlfile $XMLTV_FILE >> $LOG_FILE
     done
 else
     echo "no xmltv file found - $XMLTV_FILE" >> $LOG_FILE
