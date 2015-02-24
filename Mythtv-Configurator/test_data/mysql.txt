@@ -36,4 +36,4 @@ DBType=QMYSQL3
 # This is the command executed to wake your MySQL server.
 #
 #WOLsqlCommand=echo 'WOLsqlServerCommand not set'
-DBPassword=DToXj3ni
+DBPassword=6hnQDDm4
