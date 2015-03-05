@@ -10,7 +10,6 @@ import signal
 import string
 import urllib
 import datetime
-import time
 import subprocess
 from random import choice
 from multiprocessing import Pool
@@ -67,14 +66,12 @@ def main():
     # normal grabbing workflow
     # fill the channel list
     tmpChanList = {}
-    lstrip = string.strip
-    lsplit = string.split
     for line in open(tmpChannelFile, 'r'):
-        if lstrip(line) == '':
+        if string.strip(line) == '':
             continue
         try:
-            (chanid, name) = lsplit(line, '#')
-            tmpChanList[chanid] = lstrip(name)
+            (chanid, name) = string.split(line, '#')
+            tmpChanList[chanid] = string.strip(name)
         except:
             print 'error reading channel configuration, line: %s' % line
     DataStorage.channelList = tmpChanList
@@ -259,7 +256,7 @@ def parseChannelData(pagename, weeks):
 
     resultsList = []
     for entry in range(0, weeks):
-        for channelId in DataStorage.channelList.keys():
+        for channelId in sorted(DataStorage.channelList.keys()):
             pageFileName = getWeekDayPage(pagename, entry, channelId)
             resultsList.append(pool.apply_async(processChannelPage,
                                                 (pageFileName,)))
@@ -281,19 +278,16 @@ def parseChannelData(pagename, weeks):
     # list the channels
     for channelid in DataStorage.channelList.keys():
         tmpData.append('  <channel id="%s">\n' % channelid)
-        tmpData.append('    <display-name>%s</display-name>\n' % \
-                       DataStorage.channelList[channelid].decode('latin1'))
+        tmpData.append('    <display-name>%s</display-name>\n' % DataStorage.channelList[channelid].decode('latin1'))
         tmpData.append('    <icon src="%s/images/senderlogos/%s.gif" />\n' % (pagename, channelid.lower()))
         tmpData.append('  </channel>\n')
     DataStorage.xmlDataFile.write(string.joinfields(tmpData, ''))
 
     # collect the results
-    programIdList = []
-    [programIdList.extend(tmpResults.get(timeout = 10))
-        for tmpResults in resultsList]
+    programIdList = set()
+    [ programIdList.update(tmpResults.get(timeout = 10)) for tmpResults in resultsList ]
 
     #program page getting loop
-    totalProgrammeIds = len(programIdList)
     stepProgrammeIds = 0
     tmpTime1 = datetime.datetime(2012, 1, 1)
     for programId in programIdList:
@@ -303,7 +297,7 @@ def parseChannelData(pagename, weeks):
             print "[%s] progress: %s of %s program pages" % \
                 (tmpTime2.strftime('%Y-%m-%d %H:%M:%S'),
                  stepProgrammeIds,
-                 totalProgrammeIds)
+                 len(programIdList))
             tmpTime1 = tmpTime2
 
         # get the program page
@@ -323,28 +317,23 @@ def parseChannelData(pagename, weeks):
 
     DataStorage.xmlDataFile.write('</tv>\n')
     DataStorage.xmlDataFile.close()
-    print 'xmltv file successfully written, file: %s' % \
-            ArgumentParser.args.outputfile
+    print 'xmltv file successfully written, file: %s' % ArgumentParser.args.outputfile
 
 
 def processChannelPage(filename):
-    tmpData = ''
-    programIds = []
+    programIds = set()
     try:
         tmpData = open(filename, 'r').read().decode('utf-8')
+        programIds.update(RegExStorage.regExProgramId.findall(tmpData))
     except:
-        return programIds
-    for foundId in RegExStorage.regExProgramId.findall(tmpData):
-        if foundId not in programIds:
-            programIds.append(foundId)
+        pass
     return programIds
 
 
 def contentInjectCallback(programEntry):
 
-    llen = len
     for programid in programEntry.keys():
-        if 0 == llen(programEntry[programid]):
+        if 0 == len(programEntry[programid]):
             print 'parsing error of programid %s' % programid
             continue
 
@@ -362,9 +351,9 @@ def contentInjectCallback(programEntry):
         tmpData = []
         # concat the programme tag
         # timezone offset - the tvtv website always displays dates and times in the CET timezone
-        tmpData.append('  <programme start="%s" ' % pytz.timezone('Europe/Zurich').localize(pdate['start']).strftime('%Y%m%d%H%M%S %z'))
+        tmpData.append('  <programme start="%s" ' % pytz.timezone('Europe/Zurich').localize(pdata['start']).strftime('%Y%m%d%H%M%S %z'))
         if 'finish' in pdata and pdata['finish'] != '':
-            tmpData.append('stop="%s" ' % pytz.timezone('Europe/Zurich').localize(pdate['finish']).strftime('%Y%m%d%H%M%S %z'))
+            tmpData.append('stop="%s" ' % pytz.timezone('Europe/Zurich').localize(pdata['finish']).strftime('%Y%m%d%H%M%S %z'))
         tmpData.append('channel="%s">\n' % pdata['channel'])
 
         # write the title
@@ -440,7 +429,7 @@ def contentInjectCallback(programEntry):
                     tmpCredits.append('      <guest>%s</guest>\n' % escape(tmpGuest))
 
         # write the credits
-        if llen(tmpCredits) > 0:
+        if len(tmpCredits) > 0:
             tmpData.append('    <credits>\n')
             tmpData.extend(tmpCredits)
             tmpData.append('    </credits>\n')
@@ -474,7 +463,7 @@ def contentInjectCallback(programEntry):
                     if tmpValue != '':
                         tmpData.append('    <length units="%s">%s</length>\n' % (tmpUnits, escape(tmpValue)))
         # icon
-        if 'icon' in pdata and llen(pdata['icon']) > 0:
+        if 'icon' in pdata and len(pdata['icon']) > 0:
             tmpIcon = []
             if 'src' in pdata['icon'] and pdata['icon']['src'] != '':
                 tmpIcon = ['    <icon src="%s"' % pdata['icon']['src']]
@@ -483,7 +472,7 @@ def contentInjectCallback(programEntry):
                 if 'height' in pdata['icon'] and pdata['icon']['height'] != '':
                     tmpIcon.append(' height="%s"' % pdata['icon']['height'])
                 tmpIcon.append(' />\n')
-            if llen(tmpIcon) > 0:
+            if len(tmpIcon) > 0:
                 tmpData.extend(tmpIcon)
         # country
         if 'country' in pdata:
