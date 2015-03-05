@@ -12,7 +12,7 @@ import urllib
 import datetime
 import subprocess
 from random import choice
-from multiprocessing import Pool
+#from multiprocessing import Pool
 from xml.sax.saxutils import escape, quoteattr
 
 # third party libraries
@@ -251,16 +251,6 @@ def parseChannelList(pagename):
 
 def parseChannelData(pagename, weeks):
 
-    # multiprocessing
-    pool = Pool(processes = None, initializer = initializeProcess)
-
-    resultsList = []
-    for entry in range(0, weeks):
-        for channelId in sorted(DataStorage.channelList.keys()):
-            pageFileName = getWeekDayPage(pagename, entry, channelId)
-            resultsList.append(pool.apply_async(processChannelPage,
-                                                (pageFileName,)))
-
     # open the output file
     try:
         DataStorage.xmlDataFile = codecs.open(
@@ -283,9 +273,20 @@ def parseChannelData(pagename, weeks):
         tmpData.append('  </channel>\n')
     DataStorage.xmlDataFile.write(string.joinfields(tmpData, ''))
 
-    # collect the results
+    # multiprocessing
+    #pool = Pool(processes=None, initializer=initializeProcess)
+
     programIdList = set()
-    [ programIdList.update(tmpResults.get(timeout = 10)) for tmpResults in resultsList ]
+    #resultsList = []
+    for entry in range(0, weeks):
+        for channelId in sorted(DataStorage.channelList.keys()):
+            pageFileName = getWeekDayPage(pagename, entry, channelId)
+            #resultsList.append(pool.apply_async(processChannelPage,
+            #                                    (pageFileName,)))
+            programIdList.update(processChannelPage(pageFileName))
+
+    # collect the results
+    #[ programIdList.update(tmpResults.get(timeout = 10)) for tmpResults in resultsList ]
 
     #program page getting loop
     stepProgrammeIds = 0
@@ -305,15 +306,15 @@ def parseChannelData(pagename, weeks):
 
         # pass the filename to the process for parsing
         if programFileName != '':
-            pool.apply_async(processProgramPage,
-                             (programId, programFileName,),
-                             callback = contentInjectCallback)
-            #retValue = processProgramPage(programId, programFileName)
-            #contentInjectCallback(retValue)
+            #pool.apply_async(processProgramPage,
+            #                 (programId, programFileName,),
+            #                 callback = contentInjectCallback)
+            retValue = processProgramPage(programId, programFileName)
+            contentInjectCallback(retValue)
         stepProgrammeIds += 1
 
-    pool.close()
-    pool.join()
+    #pool.close()
+    #pool.join()
 
     DataStorage.xmlDataFile.write('</tv>\n')
     DataStorage.xmlDataFile.close()
