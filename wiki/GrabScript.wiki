@@ -1,0 +1,49 @@
+#summary Automatic grab script for yatvgrabber.
+#labels support,script,cron-job
+
+= Introduction =
+
+Use this script to automaticaly grab the xmltv data and inject it into the database.
+
+= cron entry (/etc/crontab) =
+
+ * automatic grabbing every monday, wednesday, friday at 16 o'clock
+
+{{{
+0  16   * * 1,3,5   root    screen -d -m grab-tvtv.sh
+}}}
+
+= script =
+{{{
+#!/bin/sh
+
+XMLTV_FILE="/tmp/tvtv.xml"
+LOG_FILE="/tmp/grab_tvtv.log"
+SOURCE_IDS="1 2"
+
+chmod 666 $LOG_FILE
+date >> $LOG_FILE
+
+#remove the old file
+if [ -e $XMLTV_FILE ]; then
+    rm -rf $XMLTV_FILE >> $LOG_FILE
+fi
+
+#get the data
+nice python grabtv.py --outputfile $XMLTV_FILE >> $LOG_FILE
+retValue=$?
+if [ "$retValue" -ne "0" ]; then
+    echo "aborting, grabtv.py returned $retValue" >> $LOG_FILE
+    exit $retValue
+fi
+
+# add the data to the db
+if [ -e $XMLTV_FILE ]; then
+    for id in $SOURCE_IDS
+    do
+        nice mythfilldatabase --update --sourceid $id --xmlfile $XMLTV_FILE >> $LOG_FILE
+    done
+else
+    echo "no xmltv file found - $XMLTV_FILE" >> $LOG_FILE
+fi
+}}}

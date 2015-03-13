@@ -1,0 +1,198 @@
+#summary Additional information for the usage of sasc-ng.
+#labels sasc-ng,init.d,upstart
+
+= Introduction =
+
+Use this script to start sasc-ng at boot. To get openSascNg - take a look somewhere else.
+
+= init.d script for sasc-ng =
+
+ * Make for following script executeable and copy it to /etc/init.d. 
+ * Make the links in the needed runlevels for automatic startup and shutdown (before start & after stop of the mythtv-backend) or add sasc-ng to the required-start parameter of mythtv-backend.
+ * Do not forget to blacklist your dvb drivers and add them to the script.
+
+ * sudo apt-get install mercurial subversion linux-headers-$(uname -r) build-essential libssl-dev gettext
+ * get the sasc sources
+
+/etc/init.d/open-sasc-ng
+{{{
+#!/bin/bash
+### BEGIN INIT INFO
+# Provides:          open-sasc-ng
+# Required-Start:    $local_fs
+# Required-Stop:     $local_fs
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Start sasc-ng at boot time
+# Description:       Enable service provided by open-sasc-ng.
+### END INIT INFO
+
+ENABLED=1
+LOAD_MODULES="saa7146"
+LOOPBACK_OPTIONS="num_adapters=2"
+LOOPBACK_MODULE="dvbloopback"
+SC_FILES_PATH="/etc/sc_files"
+DAEMON_LOG="/var/log/sasc-ng.log"
+DAEMON_PID="/var/run/sasc-ng.pid"
+DAEMON_OPTIONS="--join 0:2 --join 1:3 --cam-budget --sid-allpid --sid-nocache --sid-orbit 1 --cam-dir $SC_FILES_PATH --log $DAEMON_LOG --pidfile $DAEMON_PID"
+SASC_BIN="/usr/local/sbin/sasc-ng"
+SASC_DAEMON="$SASC_BIN --daemon $DAEMON_OPTIONS"
+
+# check for enabled
+test "$ENABLED" != "0" || exit 0
+
+# See if the executeable daemons are there
+test -x $SASC_BIN || exit 0
+
+. /lib/lsb/init-functions
+
+case "$1" in
+        start)
+                log_daemon_msg "Starting sasc-ng daemon"
+
+                for i in $LOAD_MODULES
+                  do
+                    lsmod | grep -qse $i
+                    if [ $? != 0 ]
+                      then
+                        modprobe $i
+                        sleep 1
+                    fi
+                done
+
+                lsmod | grep -qse $LOOPBACK_MODULE
+                if [ $? != 0 ]
+                  then
+                    modprobe $LOOPBACK_MODULE $LOOPBACK_OPTIONS
+                    sleep 1
+                fi
+
+                # prepare the start
+                eval "rm -rf $DAEMON_PID"
+                #eval "mv -f $DAEMON_LOG $DAEMON_LOG.old > /dev/null "
+
+                # start the sasc-ng daemon
+                ps -A | grep sasc_ng
+                if [ $? != 0 ]
+                  then
+                    eval "$SASC_DAEMON"
+                    sleep 3
+                else
+                    echo "sas-ng already running - please stop the daemon first"
+                fi
+                log_end_msg 0
+                ;;
+        stop)
+                log_daemon_msg "Stopping sasc-ng daemon"
+
+                # sasc-ng running? check for the pid file
+                #test -x $(DAEMON_PID) || exit 0
+
+                # just kill all sasc-ng processes
+                killall -s 9 -q $SASC_BIN
+
+                log_end_msg 0
+                ;;
+        restart)
+                $0 stop
+                sleep 1
+                $0 start
+                ;;
+        *)
+                echo "Usage: /etc/init.d/saac-ng {start|stop|restart}"
+                exit 1
+                ;;
+esac
+
+exit 0
+}}}
+
+= upstart integration for sasc-ng =
+
+ * Do not forget to blacklist our dvb modules and edit the start script
+ * add sasc-ng to the pre-start field of the mythtv-backend (see below)
+ * add started mythtv-backend to the gdm upstart script
+
+/etc/init/mythtv-backend.conf
+{{{
+# MythTV Backend service
+
+description     "MythTV Backend"
+author          "Matt Mossholder <matt@mossholder.com>"
+
+start on (local-filesystems and net-device-up IFACE=lo)
+stop on runlevel [016]
+
+#expect fork
+respawn
+
+pre-start script
+  /etc/init.d/mysql start &
+  /etc/init.d/lirc start &
+  /usr/local/sbin/start-sasc.sh
+end script
+
+script
+        test -f /etc/default/mythtv-backend && . /etc/default/mythtv-backend || true
+        exec /bin/su -c "/usr/bin/mythbackend $ARGS" $USER
+end script
+}}}
+
+/usr/local/sbin/start-sasc.sh
+{{{
+#!/bin/bash
+
+LOAD_MODULES="saa7146"
+LOOPBACK_OPTIONS="num_adapters=3"
+LOOPBACK_MODULE="dvbloopback"
+SC_FILES_PATH="/etc/sc_files"
+DAEMON_LOG="/tmp/sasc-ng.log"
+DAEMON_PID="/var/run/sasc-ng.pid"
+DAEMON_OPTIONS="--join 0:3 --join 1:4 --join 2:5 --cam-budget --cam-dir $SC_FILES_PATH --log $DAEMON_LOG --pidfile $DAEMON_PID"
+SASC_BIN="/usr/local/sbin/sasc-ng"
+SASC_DAEMON="$SASC_BIN --daemon $DAEMON_OPTIONS"
+REAL_DVB_ADAPTERS="/dev/dvb/adapter0/frontend0 /dev/dvb/adapter1/frontend0 /dev/dvb/adapter2/frontend0"
+LOOP_DVB_ADAPTERS="/dev/dvb/adapter3/frontend0 /dev/dvb/adapter4/frontend0 /dev/dvb/adapter5/frontend0"
+
+# See if the daemons file are there
+test -x $SASC_BIN || exit -1
+
+# load the dvb modules
+for i in $LOAD_MODULES; do
+        lsmod | grep -qse $i
+        if [ $? != 0 ]; then
+                modprobe $i
+        fi
+done
+
+# wait for the real dvb adapters to be online
+for i in $REAL_DVB_ADAPTERS; do
+        while [ ! -c $i ]; do
+                sleep 1
+        done
+done
+
+# load the loopback module
+lsmod | grep -qse $LOOPBACK_MODULE
+if [ $? != 0 ]; then
+        modprobe $LOOPBACK_MODULE $LOOPBACK_OPTIONS
+fi
+
+# wait for the loopback adapters to be online
+for i in $LOOP_DVB_ADAPTERS; do
+        while [ ! -c $i ]; do
+                sleep 1
+        done
+done
+
+# start the sasc-ng daemon
+ps -A | grep sasc-ng
+if [ $? != 0 ]; then
+        eval "$SASC_DAEMON"
+else
+        echo "sas-ng already running - please stop the daemon first" >> $DAEMON_LOG
+        exit -1
+fi
+exit 0
+
+}}}

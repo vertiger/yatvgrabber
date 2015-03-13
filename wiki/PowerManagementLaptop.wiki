@@ -1,0 +1,155 @@
+#summary power management tips for latop
+
+= Introduction =
+
+intended for ubuntu 11.10
+
+ * install *powertop*
+
+ * Zenbook: see [https://help.ubuntu.com/community/AsusZenbook]
+
+ * Zenbook Prime: see [https://help.ubuntu.com/community/AsusZenbookPrime]
+
+===grub boot arguments===
+/etc/default/grub
+{{{
+GRUB_CMDLINE_LINUX_DEFAULT="pcie_aspm=force i915.i915_enable_rc6=1 i915.semaphores=1 i915.i915_enable_fbc=1 i915.lvds_downclock=1 i915.modeset=1 drm.vblankoffdelay=1 rootfstype=ext4"
+}}}
+
+
+===powersave script===
+
+do not forget to make them executable
+
+put in `/etc/pm/power.d/`
+{{{
+# Powertop tunables
+
+case $1 in
+        true)
+                ## disable the nmi watchdog
+                echo 0 > /proc/sys/kernel/nmi_watchdog
+
+                ## VM writeback timeout
+                echo 1500 > /proc/sys/vm/dirty_writeback_centisecs
+
+                ## Autosuspend for USB devices
+                ### UVC 0.3M Webcam (SuYin)
+                echo auto > /sys/bus/usb/devices/1-1.5/power/level
+                ### USB2.0-CRW (Generic)
+                echo auto > /sys/bus/usb/devices/1-1.7/power/level
+                ### Bluetooth USB Host Controller (Atheros Communications)
+                echo auto > /sys/bus/usb/devices/1-1.8/power/level
+
+                ## Runtime PM for PCI devices
+                ### Atheros Communications Inc. AR9485 Wireless Network Adapter
+                echo auto > /sys/bus/pci/devices/0000:02:00.0/power/control
+
+                ### Fresco Logic Device 1009
+                echo auto > /sys/bus/pci/devices/0000:03:00.0/power/control
+                # Currently this turns the USB3 port off, awaiting response
+
+                ### Intel Corporation 6 Series/C200 Series Chipset Family 6 port SATA AHCI Controller
+                echo auto > /sys/bus/pci/devices/0000:00:1f.2/power/control
+
+                ### Intel Corporation 6 Series/C200 Series Chipset Family USB Enhanced Host Controller #1
+                echo auto > /sys/bus/pci/devices/0000:00:1d.0/power/control
+                # Causes machine to freeze on shutdown, should work with kernels 3.0.11, 3.1.3 or newer
+
+                ### Intel Corporation 2nd Generation Core Processor Family DRAM Controller
+                echo auto > /sys/bus/pci/devices/0000:00:00.0/power/control
+                ### Intel Corporation 6 Series/C200 Series Chipset Family MEI Controller #1
+                echo auto > /sys/bus/pci/devices/0000:00:16.0/power/control
+                ### Intel Corporation 6 Series/C200 Series Chipset Family High Definition Audio Controller
+                echo auto > /sys/bus/pci/devices/0000:00:1b.0/power/control
+                ### Intel Corporation 6 Series/C200 Series Chipset Family PCI Express Root Port 1
+                echo auto > /sys/bus/pci/devices/0000:00:1c.0/power/control
+                ### Intel Corporation 6 Series/C200 Series Chipset Family PCI Express Root Port 2
+                echo auto > /sys/bus/pci/devices/0000:00:1c.1/power/control
+                ### Intel Corporation 6 Series/C200 Series Chipset Family PCI Express Root Port 4
+                echo auto > /sys/bus/pci/devices/0000:00:1c.3/power/control
+                ### Intel Corporation 2nd Generation Core Processor Family Integrated Graphics Controller
+                echo auto > /sys/bus/pci/devices/0000:00:02.0/power/control
+
+                ## SATA link power management
+                echo min_power > /sys/class/scsi_host/host0/link_power_management_policy
+
+                # 0% screen brightness on battery
+                echo 0 > /sys/bus/pci/devices/0000:00:02.0/backlight/acpi_video0/brightness
+
+                # Set powersave CPU governor
+                for i in 0 1 2 3; do
+                    echo powersave > /sys/devices/system/cpu/cpu${i}/cpufreq/scaling_governor
+                done
+        ;;
+        false)
+                # 50% screen brightness on AC
+                echo 5 > /sys/bus/pci/devices/0000:00:02.0/backlight/acpi_video0/brightness
+
+                # Set ondemand CPU governor
+                for i in 0 1 2 3; do
+                    echo ondemand > /sys/devices/system/cpu/cpu${i}/cpufreq/scaling_governor
+                done
+        ;;
+esac
+
+exit 0
+}}}
+
+put in `/etc/pm/sleep.d`
+{{{
+EHCI_BUSES="0000:00:1a.0 0000:00:1d.0"
+XHCI_BUSES="0000:03:00.0"
+case "${1}" in
+    hibernate|suspend)
+        # Switch USB buses off
+        for bus in $EHCI_BUSES; do
+            echo -n $bus > /sys/bus/pci/drivers/ehci_hcd/unbind
+        done
+        for bus in $XHCI_BUSES; do
+            echo -n $bus > /sys/bus/pci/drivers/xhci_hcd/unbind
+        done
+        ;;
+    resume|thaw)
+        # Switch USB buses back on
+        for bus in $EHCI_BUSES; do
+            echo -n $bus > /sys/bus/pci/drivers/ehci_hcd/bind
+        done
+        for bus in $XHCI_BUSES; do
+            echo -n $bus > /sys/bus/pci/drivers/xhci_hcd/bind
+        done
+        # Disable touch-to-tap on Zenbook Sentelic touchpad
+        #echo -n 0x90 0x80 > /sys/devices/platform/i8042/serio4/setreg
+        #echo -n c > /sys/devices/platform/i8042/serio4/flags
+        # Hacky workaround to fix display after suspend, not needed for kernels 3.1 or newer
+        export DISPLAY=":0"
+        export XAUTHORITY="/home/YOURUSER/.Xauthority"
+        xset dpms force off
+        xset dpms force on
+        ;;
+esac
+}}}
+
+just another script - reminder for max powersaving
+/etc/rc.local
+{{{
+echo 5 > /proc/sys/vm/laptop_mode
+echo 6000 > /proc/sys/vm/dirty_writeback_centisecs
+echo Y > /sys/module/snd_hda_intel/parameters/power_save_controller
+echo 1 > /sys/module/snd_hda_intel/parameters/power_save
+echo 0 > /sys/class/backlight/acpi_video0/brightness
+echo 1 > /sys/devices/system/cpu/sched_mc_power_savings
+echo min_power > /sys/class/scsi_host/host0/link_power_management_policy
+
+for i in `find /sys/devices/system/cpu/*/cpufreq/scaling_governor`; do echo ondemand > $i; done;
+for i in `find /sys/devices/*/power/control`; do echo auto > $i; done;
+for i in `find /sys/bus/usb/devices/*/power/level`; do echo auto > $i; done;
+for i in `find /sys/bus/usb/devices/*/power/autosuspend`; do echo 2 > $i; done;
+for i in `find /sys/class/scsi_host/host*/link_power_management_policy`; do echo min_power > $i; done
+for i in `find /sys/bus/pci/devices/*/power/control`; do echo auto > $i; done
+for i in `find /sys/bus/i2c/devices/*/power/control`; do echo auto > $i; done
+for i in `find /sys/bus/spi/devices/*/power/control`; do echo auto > $i; done
+
+iwconfig wlan0 power on
+hciconfig hci0 down > /dev/null
+}}}

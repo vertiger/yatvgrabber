@@ -1,0 +1,35 @@
+#summary This is the wiki entry point of the YATVG project! You will find some useful information about the project and how to use it...
+#labels Featured
+
+= History =
+
+The YATVG project idea was submited by Lars, for his personal use ... The TV grabber should be compatible with the [http://wiki.xmltv.org/index.php/Main_Page XMLTV format].
+
+It has to grab the maximum of information, like actors, directors, description, audio format, tv format, ...
+
+As the existing tv grabber were also written in perl language, this project moves in the same direction! (Because perl offers a good support of regular expressions)
+
+One usage of this script would be to integrate it with [http://www.mythtv.org/ MYTHTV] for automatically record you favorite shows...
+
+In the other hand you can also convert the xmltv file to latex using [http://manpages.ubuntu.com/manpages/intrepid/man1/tv_to_latex.html tv_to_latex]...
+
+= Details =
+
+For the moment the project is only available from the subversion repository... And it is only tested with Linux ({Windows, Mac OS X, *} Tester are welcome)
+
+Launching this script require the following tools:
+
+  * perl (it was tested with v 5.10.0) it uses:
+   * strict
+   * Getopt::Long
+   * File::Path
+   * File::Copy
+   * File::Basename
+   * Time::Local
+   * Threads
+   * Threads::Shared
+   * Sys::CPU
+  * wget
+  * find
+  * rm
+  * optional privoxy & tor

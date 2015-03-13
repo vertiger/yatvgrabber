@@ -1,0 +1,301 @@
+#summary Allows switching between mythtv frontend and xbmc.
+#labels XBMC,Mythtv,Remote
+
+= Introduction =
+
+This script allows switching between mythtv frontend and xbmc. Restart the services / lirc / irexec once the modifications are made. Taken from [http://www.xpmediacentre.com.au/community/linux-tutorials-guides/33370-myth-tweak-switch-between-myth-xbmc-via-remote.html here]
+
+= Details =
+
+  * add this to *~/.lircrc*
+{{{
+include ~/.lirc/irexec
+}}}
+  * create or add/modify this file *~/.lirc/irexec*
+{{{
+begin
+     prog = irexec
+     button = Power
+     config = ~/scripts/appswitch.pl
+end
+}}}
+  * create this script file *~/scripts/appswitch.pl* and make it executable
+{{{
+#!/usr/bin/perl -w
+###############################################################################################################################
+## Name: appswitch.pl
+##
+## Purpose: Executed by irexec this script will cycle between mythtv and xbmc using a single button.
+##	
+## (C)opyright 2008 Arksoft.
+##									                           
+## Author: Arkay
+## 
+## Ver 1.0: 4-08-2008.	Initial version.
+## 
+###############################################################################################################################
+# Require and Use Clauses.
+###############################################################################################################################
+
+use strict;				#Keeps code neat.
+use Getopt::Std;			#Getopt module for option preprocessing.
+use vars qw/ $opt_d $opt_h /;		#Option Processing vars.
+use POSIX qw(strftime);			#Time routine we need.
+
+###############################################################################################################################
+# Prototype definitions
+###############################################################################################################################
+
+sub logmsg(@);		#Message logger so we can track what's been going on.
+sub process_opts();	#Option processing.. Nothing exiting for this script.
+sub do_command($);	#Execute a shell command for lazy perl programmers :)
+sub check_proc($);	#Check if a process is running.
+sub startproc($);
+
+###############################################################################################################################
+# Constant Definitions.
+###############################################################################################################################
+
+my ($TRUE) = 1;
+my ($FALSE) = 0;
+
+###############################################################################################################################
+# Global vars, paths, commands to call.
+###############################################################################################################################
+
+my ($LOG) = "~/scripts/appswitch.log";		#Log location.
+my ($LOGSIZE) = 1024;				#Maximum log size in kbytes, self pruning.
+my ($DEBUG) = $FALSE;				#Debugging default is off.
+my ($BASENAME) = $0;				#How was the program called?
+
+my ($MYTHTV)="/usr/bin/mythfrontend";		#Process name to start
+my ($XBMC)="/usr/bin/xbmc -fs --standalone";    #Process name to start
+my ($KMYTHTV)="mythfrontend.real";		#Process name to use with killall
+my ($KXBMC)="xbmc.bin";				#Process name to use with killall 
+my ($KMPLAYER)="mplayer";			#Also kill any external players
+my ($KILLALL)="/usr/bin/killall";		#kill command.
+my ($AUDIOHACK)="/usr/bin/iecset audio on";	#Shitty Alsa hack with intel HDA
+
+###############################################################################################################################
+# The Mainline.
+###############################################################################################################################
+MAIN:
+{
+	my ($command);
+	process_opts();
+
+	logmsg "$BASENAME started : PID($$)";
+
+	my ($myth)=check_proc($MYTHTV);
+	my ($xbmc)=check_proc($XBMC);
+
+	SWITCH:
+	{
+		if (($myth == $TRUE ) && ($xbmc == $TRUE))
+		{
+			logmsg "Killing $XBMC and $MYTHTV"; 
+			$command="$KILLALL $KMYTHTV"; do_command($command);
+			$command="$KILLALL $KMPLAYER"; do_command($command);
+			$command="$KILLALL $KXBMC"; do_command($command);
+			sleep(2);
+
+			$myth=check_proc($MYTHTV);
+			if ($myth == $TRUE)
+			{
+				logmsg "Killing $MYTHTV (forced)"; 
+				$command="$KILLALL -9 $KMYTHTV"; do_command($command);
+				$command="$KILLALL -9 $KMPLAYER"; do_command($command);
+			}
+
+			$xbmc=check_proc($XBMC);
+			if ($xbmc == $TRUE)
+			{
+				logmsg "Killing $XBMC (forced)"; 
+				$command="$KILLALL -9 $KXBMC"; do_command($command);
+			}
+			do_command($AUDIOHACK);
+			startproc("export XBMC_PLATFORM_MODE=1 ; $XBMC");
+			last SWITCH;
+		}
+				
+		if ($myth == $TRUE)
+		{
+			logmsg "Killing $MYTHTV"; 
+			$command="$KILLALL $KMYTHTV"; do_command($command);
+			$command="$KILLALL $KMPLAYER"; do_command($command);
+			sleep(2);
+			$myth=check_proc($MYTHTV);
+			if ($myth == $TRUE)
+			{
+				logmsg "Killing $MYTHTV (forced)"; 
+				$command="$KILLALL -9 $KMYTHTV"; do_command($command);
+				$command="$KILLALL -9 $KMPLAYER"; do_command($command);
+			}
+			do_command($AUDIOHACK);
+			startproc("export XBMC_PLATFORM_MODE=1 ; $XBMC");
+			last SWITCH;
+		}
+
+		if ($xbmc)
+		{
+			logmsg "Killing $XBMC"; 
+			$command="$KILLALL $KXBMC"; do_command($command);
+			sleep(2);
+			$xbmc=check_proc($XBMC);
+			if ($xbmc == $TRUE)
+			{
+				logmsg "Killing $XBMC (forced)"; 
+				$command="$KILLALL -9 $KXBMC"; do_command($command);
+			}
+			do_command($AUDIOHACK);
+			startproc($MYTHTV);
+			last SWITCH;
+		}
+		do_command($AUDIOHACK);
+		startproc("export XBMC_PLATFORM_MODE=1 ; $XBMC");
+	}
+
+	logmsg "$BASENAME Completed.";
+}
+
+###############################################################################################################################
+# startproc()
+# Execute a given command.
+###############################################################################################################################
+sub startproc($)
+{
+	my ($proc)=@_;
+	logmsg "Starting $proc"; 
+	exec("export DISPLAY=:0; $proc &");
+}
+
+###############################################################################################################################
+# check_proc($)
+# Check if processes are running that should stop shutdown from occuring.
+###############################################################################################################################
+sub check_proc($)
+{
+	my ($proc)=@_;
+	my (@output);
+	my ($command);
+	my ($count)=0;
+	my ($running)=$FALSE;
+
+	logmsg "Checking for active process $proc.";
+
+	$command="ps -ef | grep \"$proc\" | grep -v grep |wc -l";	
+	@output=do_command($command);
+
+	if (@output)
+	{
+		$count=$output[0];
+		chomp ($count);
+	}
+
+	if ($count > 0)
+	{
+		logmsg "Found active process : $proc ($count running).";
+		$running=$TRUE;
+	}
+	return($running);
+}
+
+###############################################################################################################################
+# logmsg
+# Little routine to write to the log file.
+# Rotates around $LOGSIZE bytes.
+###############################################################################################################################
+sub logmsg(@)
+{ 
+	my ($string)=@_;
+	my $time=scalar localtime;
+	my ($dev,$ino,$mode,$nlink,$uid,$gid,$rdev,$size,$atime,$mtime,$ctime,$blksize,$blocks);
+	my (@lines,$line);
+
+	($dev,$ino,$mode,$nlink,$uid,$gid,$rdev,$size,$atime,$mtime,$ctime,$blksize,$blocks)=stat("$LOG");
+
+	if (defined($size))
+	{
+		$size=$size/1024;				#size in kbyte
+
+		if ($size >= $LOGSIZE)
+		{
+			unlink ("$LOG.old") if (-e("$LOG.old"));
+			rename ($LOG,"$LOG.old");
+		}
+	}
+
+	print "$time : $string\n" if ($DEBUG==$TRUE);
+
+	if (open (LOG,">>$LOG"))
+	{
+		if ($string =~ /\n/)
+		{
+			@lines=split(/\n/,$string);
+			foreach $line (@lines)
+			{
+				print LOG "$time : $line\n"; 
+			}
+		}
+		else
+		{
+				print LOG "$time : $string\n"; 
+		}
+		close (LOG);
+	}
+	else
+	{
+		print "Unable to open LOG $LOG : $!";
+	}
+}
+
+###############################################################################################################################
+# process_opts()
+# Set Global option flags dependant on command line input.
+###############################################################################################################################
+sub process_opts()
+{
+	getopts('dh');
+
+	$DEBUG=$TRUE if ($opt_d);	
+	exit(usage(1)) if ($opt_h);
+}
+
+###############################################################################################################################
+# usage()
+# Output Relevant Usage strings if incorrect opts are given.
+###############################################################################################################################
+sub usage()
+{
+	my($ucode)=@_;
+
+	if ($ucode == 1) 
+	{
+		print "Usage: $BASENAME [-dh]\n";
+		return(0);
+	}
+}
+
+###############################################################################################################################
+# sub do_command($)
+# use system call to execute command. Returns output of command in array.
+###############################################################################################################################
+sub do_command($)
+{
+    my ($command)=@_;
+    my (@output);
+    my ($exit_value)=0;
+
+    logmsg "Executing $command" if ($DEBUG == $TRUE);
+
+    @output=`$command`; 
+
+    $exit_value = $? >> 8;
+
+    if ($exit_value != 0)
+    {
+        logmsg "Error executing $command : $!";
+    }
+    return(@output);
+}
+}}}

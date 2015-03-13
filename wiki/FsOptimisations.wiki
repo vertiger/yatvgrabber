@@ -1,0 +1,31 @@
+#summary tips for linux fs opts
+
+= Introduction =
+
+Optimisations for /etc/fstab
+
+{{{
+/dev/sda1 /               ext4    noatime,errors=remount-ro,discard 0       1
+
+# media disks
+/dev/sdb1 /mnt/hdd0 xfs     noatime        0       2
+/dev/sdc1 /mnt/hdd1 xfs     noatime        0       2
+# combined disk - using mhddfs
+mhddfs#/mnt/hdd0,/mnt/hdd1 /var/lib/mythtv fuse defaults,noatime,allow_other,mlimit=1000G 0 2
+
+#ram disks
+tmpfs   /tmp            tmpfs   defaults,noatime,mode=1777      0       0
+}}}
+
+Optimisations for /etc/rc.local
+
+{{{
+blockdev --setra 8192 /dev/sd*
+blockdev --setra 8192 /dev/md0
+
+echo 265 > /sys/block/sd*/queue/nr_requests
+echo 265 > /sys/block/md0/queue/nr_requests
+
+echo 3072 > /sys/block/sd*/queue/read_ahead_kb
+echo 3072 > /sys/block/md0/queue/read_ahead_kb
+}}}

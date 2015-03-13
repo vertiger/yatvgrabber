@@ -1,0 +1,11 @@
+find the device: aplay -l
+
+file: .asoundrc
+{{{
+pcm.!default {
+type plug
+  slave {
+    pcm "plughw:0,3"
+  }
+}
+}}}

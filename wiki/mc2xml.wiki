@@ -1,0 +1,50 @@
+#summary Additional EPG grabber (VMC & WMCE).
+#labels mc2xml,epg,grabber,cron-job
+
+= Introduction =
+
+Use the [http://mc2xml.yourfreehosting.net/?h=4ny30y mc2xml] to get additional xmltv data from the microsoft media center epg service. Ideal to fill up gaps or channels not included in the yatvgrabber.
+
+
+= cron script =
+Script to get the xmltv data und inject it into the database.
+ * Do not forget to make the dat- and channel-file accessable and editable by the cron user. 
+ * Change the source ids to something you are using.
+
+{{{
+#!/bin/bash
+
+LOG_FILE="/var/log/grab_mc2xml.log"
+XML_FILE="/tmp/mc2xml.xml"
+CHANNELS_CONFIG="/etc/xmltv/mc2xml.chl"
+GRABBER_CONFIG="/etc/xmltv/mc2xml.dat"
+SOURCE_IDS="1 2"
+
+chmod 666 $LOG_FILE
+date >> $LOG_FILE
+
+# remove the old file
+if [ -e $XML_FILE ]; then
+    rm -rf $XML_FILE >> $LOG_FILE
+fi
+
+# get the xmltv data
+nice mc2xml -D $GRABBER_CONFIG -C $CHANNELS_CONFIG -o $XML_FILE
+
+# inject the data into the database
+#nice /usr/local/bin/mc2xml -D $GRABBER_CONFIG -C $CHANNELS_CONFIG -o $XML_FILE >> $LOG_FILE
+if mc2xml -D $GRABBER_CONFIG -C $CHANNELS_CONFIG -o $XML_FILE >> $LOG_FILE ; then
+
+    # inject the data into the database
+    if [ -e $XML_FILE ]; then
+	for id in $SOURCE_IDS
+        do
+            nice mythfilldatabase --update --refresh-all --file $id $XML_FILE >> $LOG_FILE
+        done
+    else
+        echo "no xmltv file found - $XML_FILE" >> $LOG_FILE
+    fi
+else
+    echo "no xml data update" >> $LOG_FILE
+fi
+}}}
